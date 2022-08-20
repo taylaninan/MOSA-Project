@@ -1,12 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
-		<TargetFramework>net5.0-windows</TargetFramework>
+		<TargetFramework>net6.0-windows</TargetFramework>
 		<OutputType>WinExe</OutputType>
 		<UseWindowsForms>true</UseWindowsForms>
 		<Title>Mosa.Tool.Debugger</Title>
 		<Company>MOSA Project</Company>
-		<Copyright>Copyright © 2021</Copyright>
-		<LangVersion>8.0</LangVersion>
+		<copyright>Copyright © MOSA Project 2022</copyright>
+		<LangVersion>10.0</LangVersion>
 		<DebugType>full</DebugType>
 		<OutputPath>..\..\bin\</OutputPath>
 		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
@@ -170,7 +170,7 @@
 		<Content Include="bug.ico" />
 	</ItemGroup>
 	<ItemGroup>
-		<PackageReference Include="dnlib" Version="3.3.4" />
+		<PackageReference Include="dnlib" Version="3.3.5" />
 	</ItemGroup>
 	<ItemGroup>
 		<Compile Remove="DebugVMImageWindow.cs" />

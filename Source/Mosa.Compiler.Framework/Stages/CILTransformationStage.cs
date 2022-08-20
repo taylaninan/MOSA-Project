@@ -26,6 +26,8 @@ namespace Mosa.Compiler.Framework.Stages
 		protected override void PopulateVisitationDictionary()
 		{
 			AddVisitation(CILInstruction.Add, Add);
+			AddVisitation(CILInstruction.Add_ovf, AddOverflow);
+			AddVisitation(CILInstruction.Add_ovf_un, AddOverflowUnsigned);
 			AddVisitation(CILInstruction.And, BinaryLogic);
 			AddVisitation(CILInstruction.Beq, BinaryBranch);
 			AddVisitation(CILInstruction.Beq_s, BinaryBranch);
@@ -69,26 +71,26 @@ namespace Mosa.Compiler.Framework.Stages
 			AddVisitation(CILInstruction.Conv_i2, Conversion);
 			AddVisitation(CILInstruction.Conv_i4, Conversion);
 			AddVisitation(CILInstruction.Conv_i8, Conversion);
-			AddVisitation(CILInstruction.Conv_ovf_i, Conversion);
-			AddVisitation(CILInstruction.Conv_ovf_i_un, Conversion);
-			AddVisitation(CILInstruction.Conv_ovf_i1, Conversion);
-			AddVisitation(CILInstruction.Conv_ovf_i1_un, Conversion);
-			AddVisitation(CILInstruction.Conv_ovf_i2, Conversion);
-			AddVisitation(CILInstruction.Conv_ovf_i2_un, Conversion);
-			AddVisitation(CILInstruction.Conv_ovf_i4, Conversion);
-			AddVisitation(CILInstruction.Conv_ovf_i4_un, Conversion);
-			AddVisitation(CILInstruction.Conv_ovf_i8, Conversion);
-			AddVisitation(CILInstruction.Conv_ovf_i8_un, Conversion);
-			AddVisitation(CILInstruction.Conv_ovf_u, Conversion);
-			AddVisitation(CILInstruction.Conv_ovf_u_un, Conversion);
-			AddVisitation(CILInstruction.Conv_ovf_u1, Conversion);
-			AddVisitation(CILInstruction.Conv_ovf_u1_un, Conversion);
-			AddVisitation(CILInstruction.Conv_ovf_u2, Conversion);
-			AddVisitation(CILInstruction.Conv_ovf_u2_un, Conversion);
-			AddVisitation(CILInstruction.Conv_ovf_u4, Conversion);
-			AddVisitation(CILInstruction.Conv_ovf_u4_un, Conversion);
-			AddVisitation(CILInstruction.Conv_ovf_u8, Conversion);
-			AddVisitation(CILInstruction.Conv_ovf_u8_un, Conversion);
+			AddVisitation(CILInstruction.Conv_ovf_i, CheckedConversion);
+			AddVisitation(CILInstruction.Conv_ovf_i1, CheckedConversion);
+			AddVisitation(CILInstruction.Conv_ovf_i2, CheckedConversion);
+			AddVisitation(CILInstruction.Conv_ovf_i4, CheckedConversion);
+			AddVisitation(CILInstruction.Conv_ovf_i8, CheckedConversion);
+			AddVisitation(CILInstruction.Conv_ovf_u, CheckedConversion);
+			AddVisitation(CILInstruction.Conv_ovf_u1, CheckedConversion);
+			AddVisitation(CILInstruction.Conv_ovf_u2, CheckedConversion);
+			AddVisitation(CILInstruction.Conv_ovf_u4, CheckedConversion);
+			AddVisitation(CILInstruction.Conv_ovf_u8, CheckedConversion);
+			AddVisitation(CILInstruction.Conv_ovf_i_un, CheckedConversionUnsigned);
+			AddVisitation(CILInstruction.Conv_ovf_i1_un, CheckedConversionUnsigned);
+			AddVisitation(CILInstruction.Conv_ovf_i2_un, CheckedConversionUnsigned);
+			AddVisitation(CILInstruction.Conv_ovf_i4_un, CheckedConversionUnsigned);
+			AddVisitation(CILInstruction.Conv_ovf_i8_un, CheckedConversionUnsigned);
+			AddVisitation(CILInstruction.Conv_ovf_u_un, CheckedConversionUnsigned);
+			AddVisitation(CILInstruction.Conv_ovf_u1_un, CheckedConversionUnsigned);
+			AddVisitation(CILInstruction.Conv_ovf_u2_un, CheckedConversionUnsigned);
+			AddVisitation(CILInstruction.Conv_ovf_u4_un, CheckedConversionUnsigned);
+			AddVisitation(CILInstruction.Conv_ovf_u8_un, CheckedConversionUnsigned);
 			AddVisitation(CILInstruction.Conv_r_un, Conversion);
 			AddVisitation(CILInstruction.Conv_r4, Conversion);
 			AddVisitation(CILInstruction.Conv_r8, Conversion);
@@ -175,6 +177,8 @@ namespace Mosa.Compiler.Framework.Stages
 			AddVisitation(CILInstruction.Leave, Leave);
 			AddVisitation(CILInstruction.Leave_s, Leave);
 			AddVisitation(CILInstruction.Mul, Mul);
+			AddVisitation(CILInstruction.Mul_ovf, MulOverflow);
+			AddVisitation(CILInstruction.Mul_ovf_un, MulOverflowUnsigned);
 			AddVisitation(CILInstruction.Neg, Neg);
 			AddVisitation(CILInstruction.Newarr, Newarr);
 			AddVisitation(CILInstruction.Newobj, Newobj);
@@ -219,6 +223,8 @@ namespace Mosa.Compiler.Framework.Stages
 			AddVisitation(CILInstruction.Stobj, Stobj);
 			AddVisitation(CILInstruction.Stsfld, Stsfld);
 			AddVisitation(CILInstruction.Sub, Sub);
+			AddVisitation(CILInstruction.Sub_ovf, SubOverflow);
+			AddVisitation(CILInstruction.Sub_ovf_un, SubOverflowUnsigned);
 			AddVisitation(CILInstruction.Switch, Switch);
 			AddVisitation(CILInstruction.Throw, Throw);
 			AddVisitation(CILInstruction.Unbox, Unbox);
@@ -227,16 +233,12 @@ namespace Mosa.Compiler.Framework.Stages
 
 			AddVisitation(CILInstruction.PreReadOnly, PreReadOnly);
 
-			//AddVisitation(CILInstruction.Add_ovf,Add_ovf);
-			//AddVisitation(CILInstruction.Add_ovf_un,Add_ovf_un);
 			//AddVisitation(CILInstruction.Arglist,Arglist);
 			//AddVisitation(CILInstruction.Ckfinite,Ckfinite);
 			//AddVisitation(CILInstruction.Cpobj,Cpobj);
 			//AddVisitation(CILInstruction.Jmp,Jmp);
 			//AddVisitation(CILInstruction.Localalloc,Localalloc);
 			//AddVisitation(CILInstruction.Mkrefany,Mkrefany);
-			//AddVisitation(CILInstruction.Mul_ovf,Mul_ovf);
-			//AddVisitation(CILInstruction.Mul_ovf_un,Mul_ovf_un);
 			//AddVisitation(CILInstruction.PreConstrained,PreConstrained);
 			//AddVisitation(CILInstruction.PreNo,PreNo);
 			//AddVisitation(CILInstruction.PreReadOnly,PreReadOnly);
@@ -245,8 +247,6 @@ namespace Mosa.Compiler.Framework.Stages
 			//AddVisitation(CILInstruction.PreVolatile,PreVolatile);
 			//AddVisitation(CILInstruction.Refanytype,Refanytype);
 			//AddVisitation(CILInstruction.Refanyval,Refanyval);
-			//AddVisitation(CILInstruction.Sub_ovf,Sub_ovf);
-			//AddVisitation(CILInstruction.Sub_ovf_un,Sub_ovf_un);
 		}
 
 		protected override void Run()
@@ -266,6 +266,32 @@ namespace Mosa.Compiler.Framework.Stages
 		private void Add(InstructionNode node)
 		{
 			Replace(node, IRInstruction.Add32, IRInstruction.Add64, IRInstruction.AddR8, IRInstruction.AddR4);
+		}
+
+		/// <summary>
+		/// Visitation function for Add Overflow instruction
+		/// </summary>
+		/// <param name="node">The node.</param>
+		private void AddOverflow(InstructionNode node)
+		{
+			var overflowResult = AllocateVirtualRegister(TypeSystem.BuiltIn.Boolean);
+
+			node.SetInstruction2(Select(node.Result, IRInstruction.AddOverflowOut32, IRInstruction.AddOverflowOut64), node.Result, overflowResult, node.Operand1, node.Operand2);
+
+			AddOverflowCheck(node, overflowResult);
+		}
+
+		/// <summary>
+		/// Visitation function for Add Overflow Unsigned instruction
+		/// </summary>
+		/// <param name="node">The node.</param>
+		private void AddOverflowUnsigned(InstructionNode node)
+		{
+			var carryResult = AllocateVirtualRegister(TypeSystem.BuiltIn.Boolean);
+
+			node.SetInstruction2(Select(node.Result, IRInstruction.AddCarryOut32, IRInstruction.AddCarryOut64), node.Result, carryResult, node.Operand1, node.Operand2);
+
+			AddOverflowCheck(node, carryResult);
 		}
 
 		/// <summary>
@@ -333,14 +359,14 @@ namespace Mosa.Compiler.Framework.Stages
 		/// <param name="node">The node.</param>
 		private void BinaryLogic(InstructionNode node)
 		{
-			if (node.Operand1.IsEnum)
+			if (node.Operand1.Type.IsEnum)
 			{
 				var type = node.Operand1.Type;
 				var operand = Operand.CreateStaticField(type.Fields[0], TypeSystem);
 				node.SetOperand(0, operand);
 			}
 
-			if (node.Operand2.IsEnum)
+			if (node.Operand2.Type.IsEnum)
 			{
 				var type = node.Operand2.Type;
 				var operand = Operand.CreateStaticField(type.Fields[0], TypeSystem);
@@ -440,31 +466,8 @@ namespace Mosa.Compiler.Framework.Stages
 				return;
 
 			var method = context.InvokeMethod;
-
-			// If the method being called is a virtual method then we need to box the value type
-			if (method.IsVirtual
-				&& context.Operand1.Type.ElementType != null
-				&& context.Operand1.Type.ElementType.IsValueType
-				&& method.DeclaringType == context.Operand1.Type.ElementType)
-			{
-				if (!OverridesMethod(method))
-				{
-					// Get the value type, size and native alignment
-					var type = context.Operand1.Type.ElementType;
-					var typeSize = Alignment.AlignUp((uint)TypeLayout.GetTypeSize(type), TypeLayout.NativePointerAlignment);
-
-					// Create a virtual register to hold our boxed value
-					var boxedValue = AllocateVirtualRegister(TypeSystem.BuiltIn.Object);
-
-					var before = context.InsertBefore();
-					before.SetInstruction(IRInstruction.Box, boxedValue, GetRuntimeTypeHandle(type), context.Operand1, CreateConstant32(typeSize));
-
-					// Now replace the value type pointer with the boxed value virtual register
-					context.Operand1 = boxedValue;
-				}
-			}
-
 			var result = context.Result;
+
 			var operands = new List<Operand>(context.Operands);
 			var symbol = Operand.CreateSymbolFromMethod(method, TypeSystem);
 
@@ -573,7 +576,7 @@ namespace Mosa.Compiler.Framework.Stages
 			int destIndex = GetIndex(type ?? result.Type);
 			int srcIndex = GetIndex(source.Type);
 
-			var conversion = Is32BitPlatform ? ConversionTable32[destIndex][srcIndex] : ConversionTable32[destIndex][srcIndex];
+			var conversion = Is32BitPlatform ? ConversionTable32[destIndex][srcIndex] : ConversionTable64[destIndex][srcIndex];
 
 			ulong mask = GetBitMask(conversion.BitsToMask);
 
@@ -599,6 +602,76 @@ namespace Mosa.Compiler.Framework.Stages
 				context.SetInstruction(conversion.Instruction, temp, source);
 				context.AppendInstruction(conversion.PostInstruction, result, temp, CreateConstant64(mask));
 			}
+		}
+
+		/// <summary>
+		/// Visitation function for Conversion instruction from signed source.
+		/// </summary>
+		/// <param name="context">The context.</param>
+		private void CheckedConversion(Context context)
+		{
+			var result = context.Result;
+			var source = context.Operand1;
+			var type = context.MosaType;
+
+			// First check to see if we have a matching checked conversion function
+
+			var sourceTypeString = (source.Type.IsI4) ? "I4" :
+				(source.Type.IsI8) ? "I8" :
+				(source.Type.IsR4) ? "R4" :
+				(source.Type.IsR8) ? "R8" :
+				(source.Type.IsI) ? Is32BitPlatform ? "I4" : "I8" :
+				(source.Type.IsPointer) ? Is32BitPlatform ? "I4" : "I8" :
+				(!source.Type.IsValueType) ? Is32BitPlatform ? "I4" : "I8" :
+				throw new CompilerException();
+
+			var resultTypeString = type.IsU || type.IsI || type.IsPointer ? Is32BitPlatform ? "I4" : "I8" : type.TypeCode.ToString();
+
+			var methodName = $"{sourceTypeString}To{resultTypeString}";
+			var method = GetMethod("Mosa.Runtime.Math", "CheckedConversion", methodName);
+
+			Debug.Assert(method != null);
+
+			var symbol = Operand.CreateSymbolFromMethod(method, TypeSystem);
+
+			context.SetInstruction(IRInstruction.CallStatic, result, symbol, source);
+
+			MethodScanner.MethodInvoked(method, Method);
+		}
+
+		/// <summary>
+		/// Visitation function for Conversion instruction from unsigned source.
+		/// </summary>
+		/// <param name="context">The context.</param>
+		private void CheckedConversionUnsigned(Context context)
+		{
+			var result = context.Result;
+			var source = context.Operand1;
+			var type = context.MosaType;
+
+			// First check to see if we have a matching checked conversion function
+
+			var sourceTypeString = (source.Type.IsI4) ? "U4" :
+				(source.Type.IsI8) ? "U8" :
+				(source.Type.IsR4) ? "R4" :
+				(source.Type.IsR8) ? "R8" :
+				(source.Type.IsI) ? Is32BitPlatform ? "U4" : "U8" :
+				(source.Type.IsPointer) ? Is32BitPlatform ? "U4" : "U8" :
+				(!source.Type.IsValueType) ? Is32BitPlatform ? "U4" : "U8" :
+				throw new CompilerException();
+
+			var resultTypeString = type.IsU || type.IsI || type.IsPointer ? Is32BitPlatform ? "U4" : "U8" : type.TypeCode.ToString();
+
+			var methodName = $"{sourceTypeString}To{resultTypeString}";
+			var method = GetMethod("Mosa.Runtime.Math", "CheckedConversion", methodName);
+
+			Debug.Assert(method != null);
+
+			var symbol = Operand.CreateSymbolFromMethod(method, TypeSystem);
+
+			context.SetInstruction(IRInstruction.CallStatic, result, symbol, source);
+
+			MethodScanner.MethodInvoked(method, Method);
 		}
 
 		/// <summary>
@@ -723,9 +796,11 @@ namespace Mosa.Compiler.Framework.Stages
 		{
 			Debug.Assert(node.Operand1.IsParameter);
 
-			if (MosaTypeLayout.CanFitInRegister(node.Operand1.Type))
+			var type = MosaTypeLayout.GetUnderlyingType(node.Operand1.Type);
+
+			if (type != null && MosaTypeLayout.CanFitInRegister(type))
 			{
-				var loadInstruction = GetLoadParameterInstruction(node.Operand1.Type);
+				var loadInstruction = GetLoadParameterInstruction(type);
 
 				node.SetInstruction(loadInstruction, node.Result, node.Operand1);
 			}
@@ -1132,6 +1207,32 @@ namespace Mosa.Compiler.Framework.Stages
 		}
 
 		/// <summary>
+		/// Visitation function for Mul Overflow instruction
+		/// </summary>
+		/// <param name="node">The node.</param>
+		private void MulOverflow(InstructionNode node)
+		{
+			var overflowResult = AllocateVirtualRegister(TypeSystem.BuiltIn.Boolean);
+
+			node.SetInstruction2(Select(node.Result, IRInstruction.MulOverflowOut32, IRInstruction.MulOverflowOut64), node.Result, overflowResult, node.Operand1, node.Operand2);
+
+			AddOverflowCheck(node, overflowResult);
+		}
+
+		/// <summary>
+		/// Visitation function for Mul Overflow Unsigned instruction
+		/// </summary>
+		/// <param name="node">The node.</param>
+		private void MulOverflowUnsigned(InstructionNode node)
+		{
+			var carryResult = AllocateVirtualRegister(TypeSystem.BuiltIn.Boolean);
+
+			node.SetInstruction2(Select(node.Result, IRInstruction.MulCarryOut32, IRInstruction.MulCarryOut64), node.Result, carryResult, node.Operand1, node.Operand2);
+
+			AddOverflowCheck(node, carryResult);
+		}
+
+		/// <summary>
 		/// Visitation function for Neg instruction.
 		/// </summary>
 		/// <param name="node">The context.</param>
@@ -1195,9 +1296,7 @@ namespace Mosa.Compiler.Framework.Stages
 			{
 				if (result.IsValueType)
 				{
-					//Debug.Assert(result.Uses.Count <= 1, "Usages too high");
-
-					var newThisLocal = MethodCompiler.AddStackLocal(result.Type);
+					var newThisLocal = AddStackLocal(result.Type);
 					var newThis = MethodCompiler.CreateVirtualRegister(result.Type.ToManagedPointer());
 					before.SetInstruction(IRInstruction.AddressOf, newThis, newThisLocal);
 
@@ -1221,8 +1320,6 @@ namespace Mosa.Compiler.Framework.Stages
 			}
 			else
 			{
-				Debug.Assert(result.Uses.Count <= 1, "Usages too high");
-
 				var newThis = MethodCompiler.CreateVirtualRegister(result.Type.ToManagedPointer());
 				before.SetInstruction(IRInstruction.AddressOf, newThis, result);
 				before.AppendInstruction(IRInstruction.Nop);
@@ -1507,7 +1604,7 @@ namespace Mosa.Compiler.Framework.Stages
 				if (fieldType.IsReferenceType)
 				{
 					var symbol = GetStaticSymbol(field);
-					var staticReference = Operand.CreateSymbol(TypeSystem.BuiltIn.Object, symbol.Name);
+					var staticReference = Operand.CreateLabel(TypeSystem.BuiltIn.Object, symbol.Name);
 
 					node.SetInstruction(IRInstruction.LoadObject, result, staticReference, ConstantZero);
 				}
@@ -1546,7 +1643,7 @@ namespace Mosa.Compiler.Framework.Stages
 				if (fieldType.IsReferenceType)
 				{
 					var symbol = GetStaticSymbol(field);
-					var staticReference = Operand.CreateSymbol(TypeSystem.BuiltIn.Object, symbol.Name);
+					var staticReference = Operand.CreateLabel(TypeSystem.BuiltIn.Object, symbol.Name);
 
 					node.SetInstruction(IRInstruction.StoreObject, null, staticReference, ConstantZero, operand1);
 				}
@@ -1572,6 +1669,32 @@ namespace Mosa.Compiler.Framework.Stages
 		private void Sub(InstructionNode node)
 		{
 			Replace(node, IRInstruction.Sub32, IRInstruction.Sub64, IRInstruction.SubR8, IRInstruction.SubR4);
+		}
+
+		/// <summary>
+		/// Visitation function for Sub Overflow instruction
+		/// </summary>
+		/// <param name="node">The node.</param>
+		private void SubOverflow(InstructionNode node)
+		{
+			var overflowResult = AllocateVirtualRegister(TypeSystem.BuiltIn.Boolean);
+
+			node.SetInstruction2(Select(node.Result, IRInstruction.SubOverflowOut32, IRInstruction.SubOverflowOut64), node.Result, overflowResult, node.Operand1, node.Operand2);
+
+			AddOverflowCheck(node, overflowResult);
+		}
+
+		/// <summary>
+		/// Visitation function for Sub Overflow Unsigned instruction
+		/// </summary>
+		/// <param name="node">The node.</param>
+		private void SubOverflowUnsigned(InstructionNode node)
+		{
+			var carryResult = AllocateVirtualRegister(TypeSystem.BuiltIn.Boolean);
+
+			node.SetInstruction2(Select(node.Result, IRInstruction.SubCarryOut32, IRInstruction.SubCarryOut64), node.Result, carryResult, node.Operand1, node.Operand2);
+
+			AddOverflowCheck(node, carryResult);
 		}
 
 		/// <summary>
@@ -1648,7 +1771,7 @@ namespace Mosa.Compiler.Framework.Stages
 			{
 				var adr = AllocateVirtualRegister(type.ToManagedPointer());
 
-				context.SetInstruction(IRInstruction.AddressOf, adr, MethodCompiler.AddStackLocal(type));
+				context.SetInstruction(IRInstruction.AddressOf, adr, AddStackLocal(type));
 				context.AppendInstruction(IRInstruction.UnboxAny, tmp, value, adr, CreateConstant32(typeSize));
 			}
 
@@ -1741,8 +1864,8 @@ namespace Mosa.Compiler.Framework.Stages
 				/* U2 */ new ConversionEntry(IRInstruction.And32, 8),
 				/* U4 */ new ConversionEntry(IRInstruction.And32, 8),
 				/* U8 */ new ConversionEntry(IRInstruction.Truncate64x32, IRInstruction.And32, 8),
-				/* R4 */ new ConversionEntry(IRInstruction.ConvertR4ToI32, IRInstruction.And32, 8),
-				/* R8 */ new ConversionEntry(IRInstruction.ConvertR8ToI32, IRInstruction.And32, 8),
+				/* R4 */ new ConversionEntry(IRInstruction.ConvertR4ToU32, IRInstruction.And32, 8),
+				/* R8 */ new ConversionEntry(IRInstruction.ConvertR8ToU32, IRInstruction.And32, 8),
 				/* I  */ new ConversionEntry(IRInstruction.And32, 8),
 				/* U  */ new ConversionEntry(IRInstruction.And32, 8),
 				/* Ptr*/ new ConversionEntry(IRInstruction.And32, 8)
@@ -1756,8 +1879,8 @@ namespace Mosa.Compiler.Framework.Stages
 				/* U2 */ new ConversionEntry(IRInstruction.Move32),
 				/* U4 */ new ConversionEntry(IRInstruction.And32, 16),
 				/* U8 */ new ConversionEntry(IRInstruction.Truncate64x32, IRInstruction.And32, 16),
-				/* R4 */ new ConversionEntry(IRInstruction.ConvertR4ToI32, IRInstruction.And32, 16),
-				/* R8 */ new ConversionEntry(IRInstruction.ConvertR8ToI32, IRInstruction.And32, 16),
+				/* R4 */ new ConversionEntry(IRInstruction.ConvertR4ToU32, IRInstruction.And32, 16),
+				/* R8 */ new ConversionEntry(IRInstruction.ConvertR8ToU32, IRInstruction.And32, 16),
 				/* I  */ new ConversionEntry(IRInstruction.And32, 16),
 				/* U  */ new ConversionEntry(IRInstruction.And32, 16),
 				/* Ptr*/ new ConversionEntry(IRInstruction.And32, 16)
@@ -1771,8 +1894,8 @@ namespace Mosa.Compiler.Framework.Stages
 				/* U2 */ new ConversionEntry(IRInstruction.Move32),
 				/* U4 */ new ConversionEntry(IRInstruction.Move32),
 				/* U8 */ new ConversionEntry(IRInstruction.Truncate64x32),
-				/* R4 */ new ConversionEntry(IRInstruction.ConvertR4ToI32),
-				/* R8 */ new ConversionEntry(IRInstruction.ConvertR8ToI32),
+				/* R4 */ new ConversionEntry(IRInstruction.ConvertR4ToU32),
+				/* R8 */ new ConversionEntry(IRInstruction.ConvertR8ToU32),
 				/* I  */ new ConversionEntry(IRInstruction.Move32),
 				/* U  */ new ConversionEntry(IRInstruction.Move32),
 				/* Ptr*/ new ConversionEntry(IRInstruction.Move32)
@@ -1786,8 +1909,8 @@ namespace Mosa.Compiler.Framework.Stages
 				/* U2 */ new ConversionEntry(IRInstruction.ZeroExtend16x64),
 				/* U4 */ new ConversionEntry(IRInstruction.ZeroExtend32x64),
 				/* U8 */ new ConversionEntry(IRInstruction.Move64),
-				/* R4 */ new ConversionEntry(IRInstruction.ConvertR4ToI64),
-				/* R8 */ new ConversionEntry(IRInstruction.ConvertR8ToI64),
+				/* R4 */ new ConversionEntry(IRInstruction.ConvertR4ToU64),
+				/* R8 */ new ConversionEntry(IRInstruction.ConvertR8ToU64),
 				/* I  */ new ConversionEntry(IRInstruction.ZeroExtend32x64),
 				/* U  */ new ConversionEntry(IRInstruction.ZeroExtend32x64),
 				/* Ptr*/ new ConversionEntry(IRInstruction.ZeroExtend32x64)
@@ -1797,14 +1920,14 @@ namespace Mosa.Compiler.Framework.Stages
 				/* I2 */ new ConversionEntry(IRInstruction.ConvertI32ToR4),
 				/* I4 */ new ConversionEntry(IRInstruction.ConvertI32ToR4),
 				/* I8 */ new ConversionEntry(IRInstruction.ConvertI64ToR4),
-				/* U1 */ new ConversionEntry(IRInstruction.ConvertI32ToR4),
-				/* U2 */ new ConversionEntry(IRInstruction.ConvertI32ToR4),
-				/* U4 */ new ConversionEntry(IRInstruction.ConvertI32ToR4),
-				/* U8 */ new ConversionEntry(IRInstruction.ConvertI64ToR4),
+				/* U1 */ new ConversionEntry(IRInstruction.ConvertU32ToR4),
+				/* U2 */ new ConversionEntry(IRInstruction.ConvertU32ToR4),
+				/* U4 */ new ConversionEntry(IRInstruction.ConvertU32ToR4),
+				/* U8 */ new ConversionEntry(IRInstruction.ConvertU64ToR4),
 				/* R4 */ new ConversionEntry(IRInstruction.MoveR4),
 				/* R8 */ new ConversionEntry(IRInstruction.ConvertR8ToR4),
 				/* I  */ new ConversionEntry(IRInstruction.ConvertI32ToR4),
-				/* U  */ new ConversionEntry(IRInstruction.ConvertI32ToR4),
+				/* U  */ new ConversionEntry(IRInstruction.ConvertU32ToR4),
 				/* Ptr*/ new ConversionEntry(IRInstruction.ConvertI32ToR4)
 				},
 		/* R8 */ new ConversionEntry[] {
@@ -1812,14 +1935,14 @@ namespace Mosa.Compiler.Framework.Stages
 				/* I2 */ new ConversionEntry(IRInstruction.ConvertI32ToR8),
 				/* I4 */ new ConversionEntry(IRInstruction.ConvertI32ToR8),
 				/* I8 */ new ConversionEntry(IRInstruction.ConvertI64ToR8),
-				/* U1 */ new ConversionEntry(IRInstruction.ConvertI32ToR8),
-				/* U2 */ new ConversionEntry(IRInstruction.ConvertI32ToR8),
-				/* U4 */ new ConversionEntry(IRInstruction.ConvertI32ToR8),
-				/* U8 */ new ConversionEntry(IRInstruction.ConvertI64ToR8),
+				/* U1 */ new ConversionEntry(IRInstruction.ConvertU32ToR8),
+				/* U2 */ new ConversionEntry(IRInstruction.ConvertU32ToR8),
+				/* U4 */ new ConversionEntry(IRInstruction.ConvertU32ToR8),
+				/* U8 */ new ConversionEntry(IRInstruction.ConvertU64ToR8),
 				/* R4 */ new ConversionEntry(IRInstruction.ConvertR4ToR8),
 				/* R8 */ new ConversionEntry(IRInstruction.MoveR8),
 				/* I  */ new ConversionEntry(IRInstruction.ConvertI32ToR8),
-				/* U  */ new ConversionEntry(IRInstruction.ConvertI32ToR8),
+				/* U  */ new ConversionEntry(IRInstruction.ConvertU32ToR8),
 				/* Ptr*/ new ConversionEntry(IRInstruction.ConvertI32ToR8)
 				},
 		/* I */ new ConversionEntry[] {
@@ -1846,8 +1969,8 @@ namespace Mosa.Compiler.Framework.Stages
 				/* U2 */ new ConversionEntry(IRInstruction.Move32),
 				/* U4 */ new ConversionEntry(IRInstruction.Move32),
 				/* U8 */ new ConversionEntry(IRInstruction.Truncate64x32),
-				/* R4 */ new ConversionEntry(IRInstruction.ConvertR4ToI32),
-				/* R8 */ new ConversionEntry(IRInstruction.ConvertR8ToI32),
+				/* R4 */ new ConversionEntry(IRInstruction.ConvertR4ToU32),
+				/* R8 */ new ConversionEntry(IRInstruction.ConvertR8ToU32),
 				/* I  */ new ConversionEntry(IRInstruction.Move32),
 				/* U  */ new ConversionEntry(IRInstruction.Move32),
 				/* Ptr*/ new ConversionEntry(IRInstruction.Move32)
@@ -1979,6 +2102,30 @@ namespace Mosa.Compiler.Framework.Stages
 		}
 
 		/// <summary>
+		/// Adds overflow check using boolean result operand.
+		/// </summary>
+		/// <param name="node">The node.</param>
+		/// <param name="resultOperand">The overflow or carry result operand.</param>
+		private void AddOverflowCheck(InstructionNode node, Operand resultOperand)
+		{
+			var after = new Context(node).InsertAfter();
+
+			// First create new block and split current block
+			var exceptionContext = CreateNewBlockContexts(1, node.Label)[0];
+			var nextContext = Split(after);
+
+			// If result is equal to true then jump to exception block, otherwise jump to next block
+			after.SetInstruction(BranchInstruction, ConditionCode.NotEqual, null, resultOperand, ConstantZero, exceptionContext.Block);
+			after.AppendInstruction(IRInstruction.Jmp, nextContext.Block);
+
+			// Build exception block which is just a call to throw exception
+			var method = InternalRuntimeType.FindMethodByName("ThrowOverflowException");
+			var symbolOperand = Operand.CreateSymbolFromMethod(method, TypeSystem);
+
+			exceptionContext.AppendInstruction(IRInstruction.CallStatic, null, symbolOperand);
+		}
+
+		/// <summary>
 		/// Calculates the element offset for the specified index.
 		/// </summary>
 		/// <param name="node">The node.</param>
@@ -2075,12 +2222,12 @@ namespace Mosa.Compiler.Framework.Stages
 
 		private Operand GetMethodTablePointer(MosaType runtimeType)
 		{
-			return Operand.CreateSymbol(TypeSystem.BuiltIn.Pointer, Metadata.TypeDefinition + runtimeType.FullName);
+			return Operand.CreateLabel(TypeSystem.BuiltIn.Pointer, Metadata.TypeDefinition + runtimeType.FullName);
 		}
 
 		private Operand GetRuntimeTypeHandle(MosaType runtimeType)
 		{
-			return Operand.CreateSymbol(TypeSystem.GetTypeByName("System", "RuntimeTypeHandle"), Metadata.TypeDefinition + runtimeType.FullName);
+			return Operand.CreateLabel(TypeSystem.GetTypeByName("System", "RuntimeTypeHandle"), Metadata.TypeDefinition + runtimeType.FullName);
 		}
 
 		/// <summary>

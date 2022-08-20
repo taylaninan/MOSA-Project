@@ -229,51 +229,6 @@ namespace Mosa.Compiler.Framework.Transform
 			return AreAnyStatusFlagsUsed(context.Node) != TriState.No;
 		}
 
-		protected static bool HasBitValue(Operand operand)
-		{
-			return operand.BitValue != null;
-		}
-
-		protected static uint GetBitValueSetBits32(Operand operand)
-		{
-			return (uint)operand.BitValue.BitsSet;
-		}
-
-		protected static ulong GetBitValueSetBits64(Operand operand)
-		{
-			return operand.BitValue.BitsSet;
-		}
-
-		protected static ulong GetBitValueSetBits(Operand operand)
-		{
-			return operand.BitValue.BitsSet;
-		}
-
-		protected static uint GetBitValueClearBits32(Operand operand)
-		{
-			return (uint)operand.BitValue.BitsClear;
-		}
-
-		protected static ulong GetBitValueClearBits64(Operand operand)
-		{
-			return operand.BitValue.BitsClear;
-		}
-
-		protected static ulong GetBitValueClearBits(Operand operand)
-		{
-			return operand.BitValue.BitsClear;
-		}
-
-		protected static ulong GetBitValueMax(Operand operand)
-		{
-			return operand.BitValue.MaxValue;
-		}
-
-		protected static ulong GetBitValueMin(Operand operand)
-		{
-			return operand.BitValue.MinValue;
-		}
-
 		#endregion Filter Methods
 
 		#region Expression Methods
@@ -363,14 +318,14 @@ namespace Mosa.Compiler.Framework.Transform
 			return (uint)(a >> 32);
 		}
 
-		protected static ulong GetHighestSetBit(ulong value)
+		protected static uint GetHighestSetBitPosition(ulong value)
 		{
-			return (ulong)BitTwiddling.GetHighestSetBit(value);
+			return (uint)BitTwiddling.GetHighestSetBitPosition(value);
 		}
 
-		protected static ulong GetLowestSetBit(ulong value)
+		protected static uint CountTrailingZeros(ulong value)
 		{
-			return (ulong)BitTwiddling.GetLowestSetBit(value);
+			return (uint)BitTwiddling.CountTrailingZeros(value);
 		}
 
 		protected static uint GetPowerOfTwo(ulong value)
@@ -767,7 +722,8 @@ namespace Mosa.Compiler.Framework.Transform
 
 		#region Status Helpers
 
-		public enum TriState { Yes, No, Unknown };
+		public enum TriState
+		{ Yes, No, Unknown };
 
 		public static TriState AreAnyStatusFlagsUsed(Context context)
 		{
@@ -852,17 +808,15 @@ namespace Mosa.Compiler.Framework.Transform
 
 		protected static void RemoveRestOfInstructions(Context context)
 		{
-			var block = context.Block;
+			var node = context.Node.Next;
 
-			context.GotoNext();
-
-			while (!context.IsBlockEndInstruction)
+			while (!node.IsBlockEndInstruction)
 			{
-				if (!context.IsEmptyOrNop)
+				if (!node.IsEmptyOrNop)
 				{
-					context.SetNop();
+					node.SetNop();
 				}
-				context.GotoNext();
+				node = node.Next;
 			}
 		}
 

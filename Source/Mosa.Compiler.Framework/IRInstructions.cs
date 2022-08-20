@@ -23,6 +23,8 @@ namespace Mosa.Compiler.Framework.IR
 			IRInstruction.AddCarryOut64,
 			IRInstruction.AddCarryIn32,
 			IRInstruction.AddCarryIn64,
+			IRInstruction.AddOverflowOut32,
+			IRInstruction.AddOverflowOut64,
 			IRInstruction.ArithShiftRight32,
 			IRInstruction.ArithShiftRight64,
 			IRInstruction.BlockEnd,
@@ -140,6 +142,10 @@ namespace Mosa.Compiler.Framework.IR
 			IRInstruction.Move32,
 			IRInstruction.Move64,
 			IRInstruction.MoveObject,
+			IRInstruction.MulCarryOut32,
+			IRInstruction.MulCarryOut64,
+			IRInstruction.MulOverflowOut32,
+			IRInstruction.MulOverflowOut64,
 			IRInstruction.MulR4,
 			IRInstruction.MulR8,
 			IRInstruction.MulSigned32,
@@ -197,6 +203,8 @@ namespace Mosa.Compiler.Framework.IR
 			IRInstruction.SubCarryOut64,
 			IRInstruction.SubCarryIn32,
 			IRInstruction.SubCarryIn64,
+			IRInstruction.SubOverflowOut32,
+			IRInstruction.SubOverflowOut64,
 			IRInstruction.Switch,
 			IRInstruction.Throw,
 			IRInstruction.Truncate64x32,
@@ -223,6 +231,7 @@ namespace Mosa.Compiler.Framework.IR
 			IRInstruction.BitCopyR8To64,
 			IRInstruction.BitCopy32ToR4,
 			IRInstruction.BitCopy64ToR8,
+			IRInstruction.CheckArrayBounds,
 		};
 	}
 }

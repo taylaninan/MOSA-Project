@@ -34,8 +34,8 @@ namespace Mosa.Utility.Configuration
 				new Argument() { Name = "-sccp-off", Setting = "Optimizations.SCCP", Value = "false"},
 				new Argument() { Name = "-basic-optimizations", Setting = "Optimizations.Basic", Value = "true"},
 				new Argument() { Name = "-basic-optimizations-off", Setting = "Optimizations.Basic", Value = "false"},
-				new Argument() { Name = "-inline-explicit", Setting = "Optimizations.Inline.ExplicitOnly", Value = "true"},
-				new Argument() { Name = "-inline-explicit-off", Setting = "Optimizations.Inline.ExplicitOnly", Value = "false"},
+				new Argument() { Name = "-inline-explicit", Setting = "Optimizations.Inline.Explicit", Value = "true"},
+				new Argument() { Name = "-inline-explicit-off", Setting = "Optimizations.Inline.Explicit", Value = "false"},
 				new Argument() { Name = "-long-expansion", Setting = "Optimizations.LongExpansion", Value = "true"},
 				new Argument() { Name = "-long-expansion-off", Setting = "Optimizations.LongExpansion", Value = "false"},
 				new Argument() { Name = "-two-pass", Setting = "Optimizations.TwoPass", Value = "true"},
@@ -48,6 +48,8 @@ namespace Mosa.Utility.Configuration
 				new Argument() { Name = "-platform-optimizations-off", Setting = "Optimizations.Platform", Value = "false"},
 				new Argument() { Name = "-bit-tracker", Setting = "Optimizations.BitTracker", Value = "true"},
 				new Argument() { Name = "-bit-tracker-off", Setting = "Optimizations.BitTracker", Value = "false"},
+				new Argument() { Name = "-bittracker", Setting = "Optimizations.BitTracker", Value = "true"},
+				new Argument() { Name = "-bittracker-off", Setting = "Optimizations.BitTracker", Value = "false"},
 				new Argument() { Name = "-devirtualization", Setting = "Optimizations.Devirtualization", Value = "true"},
 				new Argument() { Name = "-devirtualization-off", Setting = "Optimizations.Devirtualization", Value = "false"},
 				new Argument() { Name = "-inline-level", Setting = "Optimizations.Inline.Maximum"},
@@ -103,9 +105,11 @@ namespace Mosa.Utility.Configuration
 				new Argument() { Name = "-qemu", Setting = "Emulator", Value="qemu"},
 				new Argument() { Name = "-vmware", Setting = "Emulator", Value="vmware"},
 				new Argument() { Name = "-bochs", Setting = "Emulator", Value="bochs"},
+				new Argument() { Name = "-virtualbox", Setting = "Emulator", Value="virtualbox"},
 				new Argument() { Name = "-display", Setting = "Emulator.Display", Value = "on"},
 				new Argument() { Name = "-display-off", Setting = "Emulator.Display", Value = "off"},
 				new Argument() { Name = "-memory", Setting = "Emulator.Memory"},
+				new Argument() { Name = "-cores", Setting = "Emulator.Cores"},
 				new Argument() { Name = "-qemu-gdb", Setting = "Emulator.GDB", Value="false"},
 
 				// Launcher - Image:
@@ -143,6 +147,8 @@ namespace Mosa.Utility.Configuration
 				new Argument() { Name = "-video-height", Setting = "Multiboot.Video.Height"},
 				new Argument() { Name = "-video-depth", Setting = "Multiboot.Video.Depth"},
 
+				new Argument() { Name = "-vmware-svga", Setting = "Emulator.SVGA", Value="vmware"},
+
 				new Argument() { Name = "-gdb", Setting = "Launcher.LaunchDebugger", Value="true"},
 				new Argument() { Name = "-gdb-port", Setting = "GDB.Port"},
 				new Argument() { Name = "-gdb-host", Setting = "GDB.Host"},
@@ -151,6 +157,9 @@ namespace Mosa.Utility.Configuration
 
 				new Argument() { Name = "-launch-gdb-debugger", Setting = "Launcher.LaunchDebugger", Value="true"},
 
+				// Base directory is the root MOSA directory
+				new Argument() { Name = "-include", Setting = "Image.FileSystem.RootInclude" },
+
 				new Argument() { Name = "-bootloader", Setting = "Image.BootLoader"},
 				new Argument() { Name = "-grub", Setting = "Image.BootLoader", Value = "grub0.97"},
 				new Argument() { Name = "-grub0.97", Setting = "Image.BootLoader", Value = "grub0.97"},
@@ -158,10 +167,11 @@ namespace Mosa.Utility.Configuration
 				new Argument() { Name = "-syslinux", Setting = "Image.BootLoader", Value = "syslinux3.72"},
 				new Argument() { Name = "-syslinux3.72", Setting = "Image.BootLoader", Value = "syslinux3.72"},
 				new Argument() { Name = "-syslinux6.0", Setting = "Image.BootLoader", Value = "syslinux6.03"},
+				new Argument() { Name = "-limine", Setting = "Image.BootLoader", Value = "limine"},
 
 				// Advance:
 				new Argument() { Name = "-hunt-corlib", Setting = "Launcher.HuntForCorLib", Value = "true"},
-				new Argument() { Name = "-plug-korlib", Setting = "Advanced.PlugKorlib", Value = "true"},
+				new Argument() { Name = "-plug-korlib", Setting = "Launcher.PlugKorlib", Value = "true"},
 				new Argument() { Name = "-test", Setting = "Launcher.Test", Value = "true"},
 
 				// Debugger:
@@ -364,6 +374,8 @@ namespace Mosa.Utility.Configuration
 				new Argument() { Name = "-oFast", Setting = "Optimizations.TwoPass", Value = "false"},
 				new Argument() { Name = "-oFast", Setting = "Optimizations.Inline.Maximum", Value = "0"},
 				new Argument() { Name = "-oFast", Setting = "Optimizations.Basic.Window", Value = "1"},
+
+				new Argument() { Name = "-cilv2", Setting = "CompilerDebug.CILDecodingStageV2", Value = "true"},
 			};
 
 			return map;

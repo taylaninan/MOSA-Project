@@ -6,6 +6,7 @@ using Mosa.DeviceDriver.ISA;
 using Mosa.DeviceDriver.ScanCodeMap;
 using Mosa.DeviceSystem;
 using Mosa.DeviceSystem.PCI;
+using Mosa.DeviceSystem.Service;
 using Mosa.FileSystem.FAT;
 using Mosa.Kernel.x86;
 using Mosa.Runtime;
@@ -79,6 +80,7 @@ namespace Mosa.Demo.CoolWorld.x86
 			DeviceSystem.Setup.Initialize(hardware, DeviceService.ProcessInterrupt);
 
 			Console.WriteLine("> Registering device drivers...");
+
 			DeviceService.RegisterDeviceDriver(DeviceDriver.Setup.GetDeviceDriverRegistryEntries());
 
 			Console.WriteLine("> Starting devices...");
@@ -88,8 +90,8 @@ namespace Mosa.Demo.CoolWorld.x86
 			var acpi = DeviceService.GetFirstDevice<IACPI>().DeviceDriver as IACPI;
 
 			// Setup APIC
-			var localApic = Mosa.DeviceSystem.HAL.GetPhysicalMemory((Pointer)acpi.LocalApicAddress, 0xFFFF).Address;
-			var ioApic = Mosa.DeviceSystem.HAL.GetPhysicalMemory((Pointer)acpi.IOApicAddress, 0xFFFF).Address;
+			var localApic = DeviceSystem.HAL.GetPhysicalMemory((Pointer)acpi.LocalApicAddress, 0xFFFF).Address;
+			var ioApic = DeviceSystem.HAL.GetPhysicalMemory((Pointer)acpi.IOApicAddress, 0xFFFF).Address;
 
 			APIC.Setup(localApic, ioApic);
 

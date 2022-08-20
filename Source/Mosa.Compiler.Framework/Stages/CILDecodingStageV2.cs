@@ -17,13 +17,17 @@ namespace Mosa.Compiler.Framework.Stages
 	/// </summary>
 	/// <remarks>
 	/// The CIL decoding stage takes a stream of bytes and decodes the instructions represented into an MSIL based intermediate
-	/// representation. The instructions are grouped into basic Blocks for easier local optimizations in later compiler stages.
+	/// representation. The instructions are grouped into basic blocks.
 	/// </remarks>
 	public sealed class CILDecodingStageV2 : BaseMethodCompilerStage
 	{
 		#region Stack classes
 
-		private enum StackType { Int32, Int64, R4, R8, ManagedPointer, Object, ValueType };
+		private enum StackType
+		{ Int32, Int64, R4, R8, ManagedPointer, Object, ValueType };
+
+		private enum ElementType
+		{ I1, I2, I4, I8, U1, U2, U4, U8, R4, R8, I, Ref };
 
 		private class StackEntry
 		{
@@ -47,6 +51,32 @@ namespace Mosa.Compiler.Framework.Stages
 
 		#endregion Stack classes
 
+		private class PrefixValues
+		{
+			public bool Unaligned { get; set; } = false; // ldind, stind, ldfld, stfld, ldobj, stobj, initblk, or cpblk
+			public bool Volatile { get; set; } = false; // Ldsfld and Stsfld
+			public bool Tailcall { get; set; } = false; // Call, Calli, or Callvirt
+			public bool Constrained { get; set; } = false; // callvirt
+			public bool Readonly { get; set; } = false; // ldelema
+			public bool NoTypeCheck { get; set; } = false;
+			public bool NoRangeCheck { get; set; } = false;
+			public bool NoNullCheck { get; set; } = false;
+
+			public bool Reset = false;
+
+			public void ResetAll()
+			{
+				Unaligned = false;
+				Volatile = false;
+				Tailcall = false;
+				Constrained = false;
+				Readonly = false;
+				NoTypeCheck = false;
+				NoRangeCheck = false;
+				NoNullCheck = false;
+			}
+		}
+
 		private readonly Dictionary<BasicBlock, Stack<StackEntry>> stacks = new Dictionary<BasicBlock, Stack<StackEntry>>();
 
 		private Operand[] LocalStack;
@@ -54,12 +84,11 @@ namespace Mosa.Compiler.Framework.Stages
 
 		private SortedList<int, int> Targets;
 
-		private enum ElementType { I1, I2, I4, I8, U1, U2, U4, U8, R4, R8, I, Ref };
-
 		protected override void Finish()
 		{
 			Targets = null;
-			MethodCompiler.Stop();
+
+			//MethodCompiler.Stop();
 		}
 
 		protected override void Run()
@@ -78,6 +107,8 @@ namespace Mosa.Compiler.Framework.Stages
 			};
 			prologue.First.Insert(jmpNode);
 
+			SetInitalEvaluationStack(prologue);
+
 			var startBlock = CreateNewBlock(0);
 
 			jmpNode.SetInstruction(IRInstruction.Jmp, startBlock);
@@ -93,6 +124,8 @@ namespace Mosa.Compiler.Framework.Stages
 			InitializeLocalVariables();
 
 			CreateInstructions();
+
+			InsertBlockProtectInstructions();
 		}
 
 		protected override void Setup()
@@ -129,10 +162,14 @@ namespace Mosa.Compiler.Framework.Stages
 				{
 					foreach (var target in (int[])instruction.Operand)
 					{
-						AddTarget((int)instruction.Operand);
+						AddTarget(target);
 					}
 
 					AddTarget(code[index + 1].Offset);
+				}
+				else if (opcode == OpCode.Leave || opcode == OpCode.Leave_s)
+				{
+					AddTarget((int)instruction.Operand);
 				}
 			}
 
@@ -214,6 +251,8 @@ namespace Mosa.Compiler.Framework.Stages
 					var exceptionObject = AllocateVirtualRegister(clause.Type);
 
 					context.AppendInstruction(IRInstruction.ExceptionStart, exceptionObject);
+
+					SetInitalEvaluationStack(handler, new StackEntry(StackType.Object, exceptionObject));
 				}
 
 				if (clause.ExceptionHandlerType == ExceptionHandlerType.Filter)
@@ -224,6 +263,8 @@ namespace Mosa.Compiler.Framework.Stages
 						var exceptionObject = AllocateVirtualRegister(TypeSystem.BuiltIn.Object);
 
 						context.AppendInstruction(IRInstruction.ExceptionStart, exceptionObject);
+
+						SetInitalEvaluationStack(handler, new StackEntry(StackType.Object, exceptionObject));
 					}
 
 					{
@@ -232,22 +273,55 @@ namespace Mosa.Compiler.Framework.Stages
 						var exceptionObject = AllocateVirtualRegister(TypeSystem.BuiltIn.Object);
 
 						context.AppendInstruction(IRInstruction.FilterStart, exceptionObject);
+
+						SetInitalEvaluationStack(handler, new StackEntry(StackType.Object, exceptionObject));
 					}
+				}
+			}
+		}
+
+		private void InsertBlockProtectInstructions()
+		{
+			foreach (var handler in Method.ExceptionHandlers)
+			{
+				var tryBlock = BasicBlocks.GetByLabel(handler.TryStart);
+
+				var tryHandler = BasicBlocks.GetByLabel(handler.HandlerStart);
+
+				var context = new Context(tryBlock);
+
+				while (context.IsEmpty || context.Instruction == IRInstruction.TryStart)
+				{
+					context.GotoNext();
+				}
+
+				context.AppendInstruction(IRInstruction.TryStart, tryHandler);
+
+				context = new Context(tryHandler);
+
+				if (handler.ExceptionHandlerType == ExceptionHandlerType.Finally)
+				{
+					var exceptionObject = AllocateVirtualRegister(TypeSystem.BuiltIn.Object);
+					var finallyOperand = Is32BitPlatform ? AllocateVirtualRegisterI32() : AllocateVirtualRegisterI64();
+
+					context.AppendInstruction2(IRInstruction.FinallyStart, exceptionObject, finallyOperand);
 				}
 			}
 		}
 
 		private void CreateInstructions()
 		{
-			BasicBlock block = BasicBlocks.GetByLabel(0);
-			Stack<StackEntry> stack = new Stack<StackEntry>();
-			Context context = new Context(block.AfterFirst);
+			var prefixValues = new PrefixValues();
 
-			InstructionNode endNode = block.First;
+			var block = BasicBlocks.GetByLabel(0);
+			var stack = new Stack<StackEntry>();
+			var context = new Context(block.AfterFirst);
+			var endNode = block.First;
 
 			var code = Method.Code;
+			var totalCode = code.Count;
 
-			for (int index = 0; index < code.Count; index++)
+			for (int index = 0; index < totalCode; index++)
 			{
 				var instruction = code[index];
 				var opcode = (OpCode)instruction.OpCode;
@@ -256,21 +330,51 @@ namespace Mosa.Compiler.Framework.Stages
 				if (block == null)
 				{
 					block = BasicBlocks.GetByLabel(label);
+
 					stack = GetEvaluationStack(block);
+
 					context.Node = block.AfterFirst;
 					endNode = block.First;
 				}
 
-				bool processed = Translate(stack, context, instruction, opcode);
+				bool processed = Translate(stack, context, instruction, opcode, block, label, prefixValues);
 
 				if (!processed)
+				{
 					throw new CompilerException($"Error: Unknown or unprocessable opcode: {opcode}");
+				}
+
+				if (prefixValues.Reset)
+				{
+					prefixValues.ResetAll();
+				}
 
 				UpdateLabel(context.Node, label, endNode);
 				endNode = context.Node;
 
-				if (block.HasNextBlocks || opcode == OpCode.Throw || opcode == OpCode.Endfilter || opcode == OpCode.Endfinally)
+				var peekNextblock = (index + 1 == totalCode) ? null : BasicBlocks.GetByLabel(code[index + 1].Offset);
+
+				if (peekNextblock != null || index == totalCode - 1)
 				{
+					if (opcode != OpCode.Leave
+						&& opcode != OpCode.Leave
+						&& opcode != OpCode.Leave_s
+						&& opcode != OpCode.Endfilter
+						&& opcode != OpCode.Endfinally
+						&& opcode != OpCode.Jmp
+						&& opcode != OpCode.Br
+						&& opcode != OpCode.Br_s
+						&& opcode != OpCode.Ret
+						&& opcode != OpCode.Throw
+						&& opcode != OpCode.Brfalse
+						&& opcode != OpCode.Brfalse_s
+						&& opcode != OpCode.Brtrue
+						&& opcode != OpCode.Brtrue_s
+						)
+					{
+						context.AppendInstruction(IRInstruction.Jmp, peekNextblock);
+					}
+
 					foreach (var nextblock in block.NextBlocks)
 					{
 						SaveEvaluationStack(nextblock, stack);
@@ -302,7 +406,7 @@ namespace Mosa.Compiler.Framework.Stages
 
 				var opcode = (OpCode)instruction.OpCode;
 
-				if (opcode == OpCode.Ldloca)
+				if (opcode == OpCode.Ldloca || opcode == OpCode.Ldloca_s)
 				{
 					var index = (int)instruction.Operand;
 
@@ -326,6 +430,8 @@ namespace Mosa.Compiler.Framework.Stages
 
 				var stackType = underlyingType != null ? GetStackType(underlyingType) : StackType.ValueType;
 				LocalStackType[index] = stackType;
+
+				//LocalStack[index] = MethodCompiler.AddStackLocal(type.Type, type.IsPinned);
 
 				if (stackType == StackType.ValueType || arg[index] || type.IsPinned)
 				{
@@ -379,15 +485,17 @@ namespace Mosa.Compiler.Framework.Stages
 			}
 		}
 
-		private bool Translate(Stack<StackEntry> stack, Context context, MosaInstruction instruction, OpCode opcode)
+		private bool Translate(Stack<StackEntry> stack, Context context, MosaInstruction instruction, OpCode opcode, BasicBlock block, int label, PrefixValues prefixValues)
 		{
+			prefixValues.Reset = true;
+
 			switch (opcode)
 			{
 				case OpCode.Add: return Add(context, stack);
 				case OpCode.Add_ovf: return Add(context, stack);                    // TODO: implement overflow check
 				case OpCode.Add_ovf_un: return Add(context, stack);                 // TODO: implement overflow check
 				case OpCode.And: return And(context, stack);
-				case OpCode.Arglist: return false;                                  // TODO
+				case OpCode.Arglist: return false;                                  // TODO: Not implemented in v1 either
 				case OpCode.Beq: return Branch(context, stack, ConditionCode.Equal, instruction);
 				case OpCode.Beq_s: return Branch(context, stack, ConditionCode.Equal, instruction);
 				case OpCode.Bge: return Branch(context, stack, ConditionCode.GreaterOrEqual, instruction);
@@ -411,19 +519,19 @@ namespace Mosa.Compiler.Framework.Stages
 				case OpCode.Box: return Box(context, stack, instruction);
 				case OpCode.Br: return Branch(context, stack, instruction);
 				case OpCode.Br_s: return Branch(context, stack, instruction);
-				case OpCode.Break: return true;                                     // TODO
+				case OpCode.Break: return Break(context, stack);
 				case OpCode.Brfalse: return Branch1(context, stack, ConditionCode.Equal, instruction);
 				case OpCode.Brfalse_s: return Branch1(context, stack, ConditionCode.Equal, instruction);
 				case OpCode.Brtrue: return Branch1(context, stack, ConditionCode.NotEqual, instruction);
 				case OpCode.Brtrue_s: return Branch1(context, stack, ConditionCode.NotEqual, instruction);
 				case OpCode.Call: return Call(context, stack, instruction);
-				case OpCode.Calli: return false;                                    // TODO
+				case OpCode.Calli: return false;                                    // TODO: Not implemented in v1 either
 				case OpCode.Callvirt: return Callvirt(context, stack, instruction);
 				case OpCode.Castclass: return Castclass(context, stack);
 				case OpCode.Ceq: return Compare(context, stack, ConditionCode.Equal);
 				case OpCode.Cgt: return Compare(context, stack, ConditionCode.Greater);
 				case OpCode.Cgt_un: return Compare(context, stack, ConditionCode.UnsignedGreater);
-				case OpCode.Ckfinite: return false;                                 // TODO
+				case OpCode.Ckfinite: return false;                                 // TODO: Not implemented in v1 either
 				case OpCode.Clt: return Compare(context, stack, ConditionCode.Less);
 				case OpCode.Clt_un: return Compare(context, stack, ConditionCode.UnsignedLess);
 				case OpCode.Conv_i: return ConvertI(context, stack);
@@ -464,13 +572,13 @@ namespace Mosa.Compiler.Framework.Stages
 				case OpCode.Div: return Div(context, stack);
 				case OpCode.Div_un: return DivUnsigned(context, stack);
 				case OpCode.Dup: return Dup(context, stack);
-				case OpCode.Endfilter: return false;                            // TODO
-				case OpCode.Endfinally: return false;                           // TODO
-				case OpCode.Extop: return false;                                // TODO
-				case OpCode.Initblk: return false;                              // TODO
-				case OpCode.InitObj: return false;                              // TODO
+				case OpCode.Endfilter: return false;                                // TODO: Not implemented in v1 either
+				case OpCode.Endfinally: return Endfinally(context);
+				case OpCode.Extop: return false;                                    // TODO: Not implemented in v1 either
+				case OpCode.Initblk: return Initblk(context, stack);
+				case OpCode.InitObj: return InitObj(context, stack, instruction);
 				case OpCode.Isinst: return Isinst(context, stack, instruction);
-				case OpCode.Jmp: return false;                                  // TODO
+				case OpCode.Jmp: return false;                                      // TODO: Not implemented in v1 either
 				case OpCode.Ldarg: return Ldarg(context, stack, (int)instruction.Operand);
 				case OpCode.Ldarg_0: return Ldarg(context, stack, 0);
 				case OpCode.Ldarg_1: return Ldarg(context, stack, 1);
@@ -506,10 +614,10 @@ namespace Mosa.Compiler.Framework.Stages
 				case OpCode.Ldelem_u1: return Ldelem(context, stack, ElementType.U1);
 				case OpCode.Ldelem_u2: return Ldelem(context, stack, ElementType.U2);
 				case OpCode.Ldelem_u4: return Ldelem(context, stack, ElementType.U4);
-				case OpCode.Ldelema: return false;                                  // TODO
+				case OpCode.Ldelema: return Ldelema(context, stack, instruction);
 				case OpCode.Ldfld: return Ldfld(context, stack, instruction);
-				case OpCode.Ldflda: return false;                                   // TODO
-				case OpCode.Ldftn: return false;                                    // TODO
+				case OpCode.Ldflda: return Ldflda(context, stack, instruction);
+				case OpCode.Ldftn: return Ldftn(context, stack, instruction);
 				case OpCode.Ldind_i: return Ldind(context, stack, ElementType.I);
 				case OpCode.Ldind_i1: return Ldind(context, stack, ElementType.I1);
 				case OpCode.Ldind_i2: return Ldind(context, stack, ElementType.I2);
@@ -528,41 +636,41 @@ namespace Mosa.Compiler.Framework.Stages
 				case OpCode.Ldloc_2: return Ldloc(context, stack, 2);
 				case OpCode.Ldloc_3: return Ldloc(context, stack, 3);
 				case OpCode.Ldloc_s: return Ldloc(context, stack, (int)instruction.Operand);
-				case OpCode.Ldloca: return false;                                   // TODO
-				case OpCode.Ldloca_s: return false;                                 // TODO
+				case OpCode.Ldloca: return Ldloca(context, stack, instruction);
+				case OpCode.Ldloca_s: return Ldloca(context, stack, instruction);
 				case OpCode.Ldnull: return Ldnull(context, stack);
 				case OpCode.Ldobj: return Ldobj(context, stack, instruction);
-				case OpCode.Ldsfld: return false;                                   // TODO
-				case OpCode.Ldsflda: return false;                                  // TODO
+				case OpCode.Ldsfld: return Ldsfld(context, stack, instruction);
+				case OpCode.Ldsflda: return Ldsflda(context, stack, instruction);
 				case OpCode.Ldstr: return Ldstr(context, stack, instruction);
-				case OpCode.Ldtoken: return false;                                  // TODO
-				case OpCode.Ldvirtftn: return false;                                // TODO
-				case OpCode.Leave: return false;                                    // TODO
-				case OpCode.Leave_s: return false;                                  // TODO
-				case OpCode.Localalloc: return false;                               // TODO
-				case OpCode.Mkrefany: return false;                                 // TODO
+				case OpCode.Ldtoken: return Ldtoken(context, stack, instruction);
+				case OpCode.Ldvirtftn: return false;                                // TODO: Not implemented in v1 either
+				case OpCode.Leave: return Leave(context, stack, instruction, block);
+				case OpCode.Leave_s: return Leave(context, stack, instruction, block);
+				case OpCode.Localalloc: return false;                               // TODO: Not implemented in v1 either
+				case OpCode.Mkrefany: return false;                                 // TODO: Not implemented in v1 either
 				case OpCode.Mul: return Mul(context, stack);
-				case OpCode.Mul_ovf: return Mul(context, stack);        // TODO: implement overflow check
-				case OpCode.Mul_ovf_un: return Mul(context, stack);     // TODO: implement overflow check
+				case OpCode.Mul_ovf: return Mul(context, stack);                    // TODO: implement overflow check
+				case OpCode.Mul_ovf_un: return Mul(context, stack);                 // TODO: implement overflow check
 				case OpCode.Neg: return Neg(context, stack);
 				case OpCode.Newarr: return Newarr(context, stack, instruction);
 				case OpCode.Newobj: return Newobj(context, stack, instruction);
-				case OpCode.Nop: return true;
+				case OpCode.Nop: return Nop(context);
 				case OpCode.Not: return Not(context, stack);
 				case OpCode.Or: return Or(context, stack);
 				case OpCode.Pop: return Pop(context, stack);
-				case OpCode.PreConstrained: return false;                           // TODO
-				case OpCode.PreNo: return false;                                    // TODO
-				case OpCode.PreReadOnly: return false;                              // TODO
-				case OpCode.PreTail: return false;                                  // TODO
-				case OpCode.PreUnaligned: return false;                             // TODO
-				case OpCode.PreVolatile: return false;                              // TODO
-				case OpCode.Refanytype: return false;                               // TODO
-				case OpCode.Refanyval: return false;                                // TODO
+				case OpCode.Constrained: prefixValues.Constrained = true; prefixValues.Reset = false; return true;
+				case OpCode.No: /* TODO */ prefixValues.Reset = false; return true;
+				case OpCode.ReadOnly: prefixValues.Readonly = true; prefixValues.Reset = false; return true;
+				case OpCode.Tailcall: prefixValues.Tailcall = true; prefixValues.Reset = false; return true;
+				case OpCode.Unaligned: prefixValues.Unaligned = true; prefixValues.Reset = false; return true;
+				case OpCode.Volatile: prefixValues.Volatile = true; prefixValues.Reset = false; return true;
+				case OpCode.Refanytype: return false;                               // TODO: Not implemented in v1 either
+				case OpCode.Refanyval: return false;                                // TODO: Not implemented in v1 either
 				case OpCode.Rem: return RemOperand(context, stack);
 				case OpCode.Rem_un: return RemUnsigned(context, stack);
 				case OpCode.Ret: return Ret(context, stack);
-				case OpCode.Rethrow: return false;                                  // TODO
+				case OpCode.Rethrow: return Rethrow(context, stack);
 				case OpCode.Shl: return Shl(context, stack, instruction);
 				case OpCode.Shr: return Shr(context, stack, instruction);
 				case OpCode.Shr_un: return ShrU(context, stack, instruction);
@@ -578,7 +686,7 @@ namespace Mosa.Compiler.Framework.Stages
 				case OpCode.Stelem_r4: return Stelem(context, stack, ElementType.R4);
 				case OpCode.Stelem_r8: return Stelem(context, stack, ElementType.R8);
 				case OpCode.Stelem_ref: return Stelem(context, stack, ElementType.Ref);
-				case OpCode.Stfld: return false;                                    // TODO
+				case OpCode.Stfld: return Stfld(context, stack, instruction);
 				case OpCode.Stind_i: return Stind(context, stack, ElementType.I);
 				case OpCode.Stind_i1: return Stind(context, stack, ElementType.I1);
 				case OpCode.Stind_i2: return Stind(context, stack, ElementType.I2);
@@ -594,11 +702,11 @@ namespace Mosa.Compiler.Framework.Stages
 				case OpCode.Stloc_3: return Stloc(context, stack, 3);
 				case OpCode.Stloc_s: return Stloc(context, stack, (int)instruction.Operand);
 				case OpCode.Stobj: return Stobj(context, stack, instruction);
-				case OpCode.Stsfld: return false;                               // TODO
+				case OpCode.Stsfld: return Stsfld(context, stack, instruction);
 				case OpCode.Sub: return Sub(context, stack);
-				case OpCode.Sub_ovf: return Sub(context, stack);                // TODO: implement overflow check
-				case OpCode.Sub_ovf_un: return Sub(context, stack);             // TODO: implement overflow check
-				case OpCode.Switch: return false;                               // TODO
+				case OpCode.Sub_ovf: return Sub(context, stack);                    // TODO: implement overflow check
+				case OpCode.Sub_ovf_un: return Sub(context, stack);                 // TODO: implement overflow check
+				case OpCode.Switch: return Switch(context, stack, instruction);
 				case OpCode.Throw: return Throw(context, stack);
 				case OpCode.Unbox: return Unbox(context, stack, instruction);
 				case OpCode.Unbox_any: return UnboxAny(context, stack, instruction);
@@ -608,7 +716,7 @@ namespace Mosa.Compiler.Framework.Stages
 			}
 		}
 
-		private void UpdateLabel(InstructionNode node, int label, InstructionNode endNode)
+		private static void UpdateLabel(InstructionNode node, int label, InstructionNode endNode)
 		{
 			while (node != endNode)
 			{
@@ -635,7 +743,7 @@ namespace Mosa.Compiler.Framework.Stages
 				operands.Insert(0, thisOperand);
 			}
 
-			operands.Reverse();
+			//operands.Reverse();
 			return operands;
 		}
 
@@ -777,6 +885,8 @@ namespace Mosa.Compiler.Framework.Stages
 				return Is32BitPlatform ? ElementType.I4 : ElementType.I8;
 			else if (type.IsManagedPointer)
 				return Is32BitPlatform ? ElementType.I4 : ElementType.I8;
+			else if (type.IsPointer)
+				return Is32BitPlatform ? ElementType.I4 : ElementType.I8;
 
 			// TODO --- enums?
 
@@ -787,12 +897,34 @@ namespace Mosa.Compiler.Framework.Stages
 		{
 			if (!stacks.TryGetValue(block, out Stack<StackEntry> stack))
 			{
-				stack = new Stack<StackEntry>(stack);
+				stack = new Stack<StackEntry>();
 			}
 
 			var newstack = new Stack<StackEntry>(stack);
 
 			return newstack;
+		}
+
+		private void SaveEvaluationStack(BasicBlock block, Stack<StackEntry> stack)
+		{
+			if (stacks.TryGetValue(block, out var foundstack))
+			{
+				// TODO: Check stack size
+			}
+			else
+			{
+				stacks.Add(block, stack);
+			}
+		}
+
+		private void SetInitalEvaluationStack(BasicBlock block, StackEntry stackEntry = null)
+		{
+			var stack = new Stack<StackEntry>();
+
+			stacks.Add(block, stack);
+
+			if (stackEntry != null)
+				stack.Push(stackEntry);
 		}
 
 		private BasicBlock GetOrCreateBlock(int label)
@@ -809,12 +941,12 @@ namespace Mosa.Compiler.Framework.Stages
 
 		private Operand GetMethodTablePointer(MosaType runtimeType)
 		{
-			return Operand.CreateSymbol(TypeSystem.BuiltIn.Pointer, Metadata.TypeDefinition + runtimeType.FullName);
+			return Operand.CreateLabel(TypeSystem.BuiltIn.Pointer, Metadata.TypeDefinition + runtimeType.FullName);
 		}
 
 		private Operand GetRuntimeTypeHandle(MosaType runtimeType)
 		{
-			return Operand.CreateSymbol(TypeSystem.GetTypeByName("System", "RuntimeTypeHandle"), Metadata.TypeDefinition + runtimeType.FullName);
+			return Operand.CreateLabel(TypeSystem.GetTypeByName("System", "RuntimeTypeHandle"), Metadata.TypeDefinition + runtimeType.FullName);
 		}
 
 		private uint GetSize(ElementType elementType)
@@ -846,7 +978,7 @@ namespace Mosa.Compiler.Framework.Stages
 			else if (type.IsI8 || type.IsU8)
 				return StackType.Int64;
 			else if (type.IsR8)
-				return StackType.Int64;
+				return StackType.R8;
 			else if (type.IsR4)
 				return StackType.R4;
 
@@ -903,18 +1035,6 @@ namespace Mosa.Compiler.Framework.Stages
 				return stackEntry.Type;
 
 			return GetType(stackEntry.StackType);
-		}
-
-		private void SaveEvaluationStack(BasicBlock block, Stack<StackEntry> stack)
-		{
-			if (stacks.TryGetValue(block, out var foundstack))
-			{
-				// TODO: Check stack size
-			}
-			else
-			{
-				stacks.Add(block, stack);
-			}
 		}
 
 		#endregion Helpers
@@ -1199,8 +1319,7 @@ namespace Mosa.Compiler.Framework.Stages
 						return true;
 					}
 
-				default:
-					return false;
+				default: return false;
 			}
 		}
 
@@ -1268,23 +1387,29 @@ namespace Mosa.Compiler.Framework.Stages
 			var methodTable = GetMethodTablePointer(type);
 			var isPrimitive = IsPrimitive(type);
 
-			var elementType = GetElementType(type);
-
 			if (isPrimitive)
 			{
+				var elementType = GetElementType(type);
+
 				var boxInstruction = GetBoxInstruction(elementType);
 				context.AppendInstruction(boxInstruction, result, methodTable, entry.Operand);
 				return true;
 			}
 			else
 			{
-				var address = AllocateVirtualRegisterManagedPointer();
-				var typeSize = Alignment.AlignUp((uint)TypeLayout.GetTypeSize(type), TypeLayout.NativePointerAlignment);
+				var typeSize = Alignment.AlignUp(TypeLayout.GetTypeSize(type), TypeLayout.NativePointerAlignment);
 
-				context.AppendInstruction(IRInstruction.AddressOf, address, entry.Operand);
-				context.AppendInstruction(IRInstruction.Box, result, methodTable, address, CreateConstant32(typeSize));
+				//var address = AllocateVirtualRegisterManagedPointer();
+				//context.AppendInstruction(IRInstruction.AddressOf, address, entry.Operand);
+
+				context.AppendInstruction(IRInstruction.Box, result, methodTable, entry.Operand, CreateConstant32(typeSize));
 				return true;
 			}
+		}
+
+		private bool Break(Context context, Stack<StackEntry> stack)
+		{
+			return true;
 		}
 
 		private bool Branch(Context context, Stack<StackEntry> stack, MosaInstruction instruction)
@@ -1299,8 +1424,8 @@ namespace Mosa.Compiler.Framework.Stages
 
 		private bool Branch(Context context, Stack<StackEntry> stack, ConditionCode conditionCode, MosaInstruction instruction)
 		{
-			var entry1 = stack.Pop();
 			var entry2 = stack.Pop();
+			var entry1 = stack.Pop();
 
 			var target = (int)instruction.Operand;
 			var block = BasicBlocks.GetByLabel(target);
@@ -1396,19 +1521,14 @@ namespace Mosa.Compiler.Framework.Stages
 				stack.Push(resultStackType);
 			}
 
+			//if (ProcessExternalCall(context, method, operands))
+			//	return true;
+
 			var symbol = Operand.CreateSymbolFromMethod(method, TypeSystem);
 
-			if (method.IsVirtual)
-			{
-				// TODO
-				return false;
-			}
-			else
-			{
-				context.AppendInstruction(IRInstruction.CallStatic, result, symbol, operands);
-			}
+			context.AppendInstruction(IRInstruction.CallStatic, result, symbol, operands);
 
-			context.InvokeMethod = method;
+			//context.InvokeMethod = method; // Optional?
 
 			return true;
 		}
@@ -1450,7 +1570,7 @@ namespace Mosa.Compiler.Framework.Stages
 				context.AppendInstruction(IRInstruction.CallStatic, result, symbol, operands);
 			}
 
-			context.InvokeMethod = method;
+			//context.InvokeMethod = method; // Optional
 
 			return true;
 		}
@@ -1474,8 +1594,8 @@ namespace Mosa.Compiler.Framework.Stages
 
 		private bool Compare(Context context, Stack<StackEntry> stack, ConditionCode conditionCode)
 		{
-			var entry1 = stack.Pop();
 			var entry2 = stack.Pop();
+			var entry1 = stack.Pop();
 
 			var result = AllocateVirtualRegisterI32();
 			stack.Push(new StackEntry(StackType.Int32, result));
@@ -1822,6 +1942,10 @@ namespace Mosa.Compiler.Framework.Stages
 					case StackType.R8:
 						context.AppendInstruction(IRInstruction.ConvertR8ToU32, result, entry1.Operand);
 						return true;
+
+					case StackType.ManagedPointer:
+						context.AppendInstruction(IRInstruction.Move32, result, entry1.Operand);
+						return true;
 				}
 
 				// TODO: Float
@@ -1847,6 +1971,10 @@ namespace Mosa.Compiler.Framework.Stages
 
 					case StackType.R8:
 						context.AppendInstruction(IRInstruction.ConvertR8ToU64, result, entry1.Operand);
+						return true;
+
+					case StackType.ManagedPointer:
+						context.AppendInstruction(IRInstruction.Move64, result, entry1.Operand);
 						return true;
 				}
 
@@ -2410,6 +2538,48 @@ namespace Mosa.Compiler.Framework.Stages
 			return true;
 		}
 
+		private bool Endfinally(Context context)
+		{
+			context.AppendInstruction(IRInstruction.FinallyEnd);
+
+			return true;
+		}
+
+		private bool Initblk(Context context, Stack<StackEntry> stack)
+		{
+			var entry1 = stack.Peek();
+			var entry2 = stack.Peek();
+			var entry3 = stack.Peek();
+
+			context.AppendInstruction(IRInstruction.MemorySet, null, entry1.Operand, entry2.Operand, entry3.Operand);
+
+			return true;
+		}
+
+		private bool InitObj(Context context, Stack<StackEntry> stack, MosaInstruction instruction)
+		{
+			var entry = stack.Peek();
+
+			// Retrieve the type reference
+			var type = (MosaType)instruction.Operand;
+
+			// According to ECMA Spec, if the pointer element type is a reference type then
+			// this instruction is the equivalent of ldnull followed by stind.ref
+
+			if (type.IsReferenceType)
+			{
+				context.AppendInstruction(IRInstruction.StoreObject, null, entry.Operand, ConstantZero, Operand.GetNullObject(TypeSystem));
+				context.MosaType = type;
+			}
+			else
+			{
+				var size = CreateConstant32(TypeLayout.GetTypeSize(type));
+				context.AppendInstruction(IRInstruction.MemorySet, null, entry.Operand, ConstantZero, size);
+			}
+
+			return true;
+		}
+
 		private bool Isinst(Context context, Stack<StackEntry> stack, MosaInstruction instruction)
 		{
 			var entry = stack.Pop();
@@ -2439,11 +2609,14 @@ namespace Mosa.Compiler.Framework.Stages
 			var parameter = MethodCompiler.Parameters[index];
 			var type = parameter.Type;
 			var underlyingType = GetUnderlyingType(type);
-			var isCompound = !IsPrimitive(underlyingType);
+			var isCompound = IsCompoundType(underlyingType);
 
 			if (isCompound)
 			{
-				var result = AllocateVirtualRegister(type);
+				//var elementType = GetElementType(underlyingType);
+				var stacktype = GetStackType(type);
+				var result = AllocatedOperand(stacktype, type);
+
 				context.AppendInstruction(IRInstruction.LoadParamCompound, result, parameter);
 				context.MosaType = type;
 				stack.Push(new StackEntry(StackType.ValueType, result, type));
@@ -2455,10 +2628,10 @@ namespace Mosa.Compiler.Framework.Stages
 				var stacktype = GetStackType(elementType);
 				var result = AllocatedOperand(stacktype);
 
-				stack.Push(new StackEntry(stacktype, result));
-
 				var loadInstruction = GetLoadParamInstruction(elementType);
 				context.AppendInstruction(loadInstruction, result, parameter);
+
+				stack.Push(new StackEntry(stacktype, result));
 
 				return true;
 			}
@@ -2486,28 +2659,29 @@ namespace Mosa.Compiler.Framework.Stages
 			var array = entry2.Operand;
 
 			var type = (MosaType)instruction.Operand;
-			var underlyingType = GetUnderlyingType(type.ElementType);
-			var isCompound = !IsPrimitive(underlyingType);
 
-			AddArrayBoundsCheck(context, array, index);
+			//var underlyingType = GetUnderlyingType(type.ElementType);
+			var isCompound = IsCompoundType(type);
 
-			var elementOffset = CalculateArrayElementOffset(context, type.ElementType, index);
+			context.AppendInstruction(IRInstruction.CheckArrayBounds, null, array, index);
+
+			var elementOffset = CalculateArrayElementOffset(context, type, index);
 			var totalElementOffset = CalculateTotalArrayOffset(context, elementOffset);
 
 			if (isCompound)
 			{
-				var result = AllocatedOperand(StackType.ValueType, type.ElementType);
+				var result = AllocatedOperand(StackType.ValueType, type);
 
 				context.AppendInstruction(IRInstruction.LoadCompound, result, array, totalElementOffset);
 				context.MosaType = type.ElementType;
 
-				stack.Push(new StackEntry(StackType.ValueType, result, type.ElementType));
+				stack.Push(new StackEntry(StackType.ValueType, result, type));
 
 				return true;
 			}
 			else
 			{
-				var stacktype = GetStackType(type.ElementType);
+				var stacktype = GetStackType(type);
 				var result = AllocatedOperand(stacktype);
 				var elementType = GetElementType(stacktype);
 				var loadInstruction = GetLoadInstruction(elementType);
@@ -2530,7 +2704,7 @@ namespace Mosa.Compiler.Framework.Stages
 
 			//var underlyingType = GetUnderlyingType(type.ElementType);
 
-			AddArrayBoundsCheck(context, array, index);
+			context.AppendInstruction(IRInstruction.CheckArrayBounds, null, array, index);
 
 			var elementOffset = CalculateArrayElementOffset(context, GetSize(elementType), index);
 			var totalElementOffset = CalculateTotalArrayOffset(context, elementOffset);
@@ -2542,6 +2716,33 @@ namespace Mosa.Compiler.Framework.Stages
 			var loadInstruction = GetLoadInstruction(elementType);
 
 			context.AppendInstruction(loadInstruction, result, array, totalElementOffset);
+
+			return true;
+		}
+
+		private bool Ldelema(Context context, Stack<StackEntry> stack, MosaInstruction instruction)
+		{
+			var entry1 = stack.Pop();
+			var entry2 = stack.Pop();
+
+			var index = entry1.Operand;
+			var array = entry2.Operand;
+
+			var type = (MosaType)instruction.Operand;
+
+			//var underlyingType = GetUnderlyingType(type);
+
+			var result = AllocatedOperand(StackType.ManagedPointer);
+
+			// Array bounds check
+			context.AppendInstruction(IRInstruction.CheckArrayBounds, null, array, index);
+
+			var elementOffset = CalculateArrayElementOffset(context, type, index);
+			var totalElementOffset = CalculateTotalArrayOffset(context, elementOffset);
+
+			context.AppendInstruction(Is32BitPlatform ? (BaseIRInstruction)IRInstruction.Add32 : IRInstruction.Add64, result, array, totalElementOffset);
+
+			stack.Push(new StackEntry(StackType.ManagedPointer, result));
 
 			return true;
 		}
@@ -2558,11 +2759,13 @@ namespace Mosa.Compiler.Framework.Stages
 			{
 				case StackType.Int32:
 				case StackType.Int64:
+				case StackType.R4:
+				case StackType.R8:
 				case StackType.ManagedPointer:
 				case StackType.Object:
 					{
 						var underlyingType = GetUnderlyingType(type);
-						var isCompound = !IsPrimitive(underlyingType);
+						var isCompound = IsCompoundType(underlyingType);
 
 						if (isCompound)
 						{
@@ -2591,11 +2794,150 @@ namespace Mosa.Compiler.Framework.Stages
 					}
 				case StackType.ValueType:
 					{
-						return false;
+						var underlyingType = GetUnderlyingType(type);
+						var isCompound = IsCompoundType(underlyingType);
+
+						if (isCompound)
+						{
+							var result = AllocatedOperand(StackType.ValueType, type);
+
+							context.AppendInstruction(IRInstruction.LoadCompound, result, entry.Operand, CreateConstant32(offset));
+							context.MosaType = type;
+
+							stack.Push(new StackEntry(StackType.ValueType, result, type));
+
+							return true;
+						}
+						else
+						{
+							var stacktype = underlyingType != null ? GetStackType(underlyingType) : StackType.ValueType;
+							var result = AllocatedOperand(stacktype);
+							var elementType = GetElementType(stacktype);
+							var loadInstruction = GetLoadInstruction(elementType);
+
+							var address = AllocateVirtualRegisterManagedPointer();
+							var fixedOffset = CreateConstant32(offset);
+
+							context.AppendInstruction(IRInstruction.AddressOf, address, entry.Operand);
+							context.AppendInstruction(loadInstruction, result, address, fixedOffset);
+
+							stack.Push(new StackEntry(stacktype, result));
+
+							return true;
+						}
 					}
 
 				default: return false;
 			}
+		}
+
+		private bool Ldtoken(Context context, Stack<StackEntry> stack, MosaInstruction instruction)
+		{
+			var move = GetMoveInstruction(ElementType.I);
+
+			Operand source = null;
+
+			if (instruction.Operand is MosaType)
+			{
+				var type = (MosaType)instruction.Operand;
+				source = Operand.CreateUnmanagedSymbolPointer(Metadata.TypeDefinition + type.FullName, TypeSystem);
+			}
+			else if (instruction.Operand is MosaMethod)
+			{
+				var method = (MosaMethod)instruction.Operand;
+				source = Operand.CreateUnmanagedSymbolPointer(Metadata.MethodDefinition + method.FullName, TypeSystem);
+			}
+			else if (instruction.Operand is MosaField)
+			{
+				var field = (MosaField)instruction.Operand;
+				source = Operand.CreateUnmanagedSymbolPointer(Metadata.FieldDefinition + field.FullName, TypeSystem);
+				MethodScanner.AccessedField(context.MosaField);
+			}
+
+			var runtimeFieldHandle = TypeSystem.GetTypeByName("System", "RuntimeFieldHandle"); // FUTURE: cache this
+
+			var result = AllocateVirtualRegister(runtimeFieldHandle);
+			context.AppendInstruction(move, result, source);
+
+			//stack.Push(new StackEntry(Is32BitPlatform ? StackType.Int32 : StackType.Int64, result));
+			stack.Push(new StackEntry(StackType.ValueType, result));
+
+			return true;
+		}
+
+		private bool Leave(Context context, Stack<StackEntry> stack, MosaInstruction instruction, BasicBlock currentBlock)
+		{
+			var leaveBlock = BasicBlocks.GetByLabel((int)instruction.Operand);
+
+			// Traverse to the header block
+			var headerBlock = TraverseBackToNativeBlock(currentBlock);
+
+			// Find enclosing try or finally handler
+			var exceptionHandler = FindImmediateExceptionHandler(headerBlock.Label);
+			bool inTry = exceptionHandler.IsLabelWithinTry(headerBlock.Label);
+
+			var endInstruction = inTry ? (BaseInstruction)IRInstruction.TryEnd : IRInstruction.ExceptionEnd;
+
+			context.AppendInstruction(endInstruction, leaveBlock);  // added header block
+
+			return true;
+		}
+
+		private bool Ldflda(Context context, Stack<StackEntry> stack, MosaInstruction instruction)
+		{
+			var entry = stack.Pop();
+
+			var field = (MosaField)instruction.Operand;
+
+			MethodScanner.AccessedField(field);
+
+			uint offset = TypeLayout.GetFieldOffset(field);
+
+			var fieldPtr = field.FieldType.ToManagedPointer();
+
+			var result = AllocatedOperand(StackType.ManagedPointer, fieldPtr);
+
+			if (offset == 0)
+			{
+				var move = GetMoveInstruction(ElementType.I);
+
+				context.AppendInstruction(move, result, entry.Operand);
+			}
+			else
+			{
+				if (Is32BitPlatform)
+					context.AppendInstruction(IRInstruction.Add32, result, entry.Operand, CreateConstant32(offset));
+				else
+					context.AppendInstruction(IRInstruction.Add64, result, entry.Operand, CreateConstant64(offset));
+			}
+
+			stack.Push(new StackEntry(StackType.ManagedPointer, result));
+
+			return true;
+		}
+
+		private bool Ldftn(Context context, Stack<StackEntry> stack, MosaInstruction instruction)
+		{
+			var method = (MosaMethod)instruction.Operand;
+
+			var functionPointer = TypeSystem.ToFnPtr(method.Signature);
+
+			var stacktype = GetStackType(functionPointer);
+			var result = AllocatedOperand(stacktype);
+
+			var move = GetMoveInstruction(ElementType.I);
+
+			context.AppendInstruction(move, result, Operand.CreateSymbolFromMethod(method, TypeSystem));
+
+			stack.Push(new StackEntry(stacktype, result));
+
+			MethodScanner.MethodInvoked(method, Method);
+
+			var methodData = MethodCompiler.Compiler.GetMethodData(method);
+
+			methodData.HasMethodPointerReferenced = true;
+
+			return true;
 		}
 
 		private bool Ldind(Context context, Stack<StackEntry> stack, ElementType elementType)
@@ -2645,8 +2987,9 @@ namespace Mosa.Compiler.Framework.Stages
 
 			if (stacktype == StackType.ValueType)
 			{
-				var result2 = AllocateVirtualRegister(local.Type);
-				context.AppendInstruction(IRInstruction.LoadParamCompound, result2, local);
+				//var result2 = AllocateVirtualRegister(local.Type);
+				var result2 = AddStackLocal(local.Type);
+				context.AppendInstruction(IRInstruction.MoveCompound, result2, local);
 				context.MosaType = local.Type;
 
 				stack.Push(new StackEntry(stacktype, result2, local.Type));
@@ -2677,6 +3020,21 @@ namespace Mosa.Compiler.Framework.Stages
 			}
 		}
 
+		private bool Ldloca(Context context, Stack<StackEntry> stack, MosaInstruction instruction)
+		{
+			var index = (int)instruction.Operand;
+
+			var local = LocalStack[index];
+
+			var result = AllocateVirtualRegisterManagedPointer();
+
+			stack.Push(new StackEntry(StackType.ManagedPointer, result));
+
+			context.AppendInstruction(IRInstruction.AddressOf, result, local);
+
+			return true;
+		}
+
 		private bool Ldobj(Context context, Stack<StackEntry> stack, MosaInstruction instruction)
 		{
 			var entry = stack.Pop();
@@ -2684,11 +3042,12 @@ namespace Mosa.Compiler.Framework.Stages
 			var type = (MosaType)instruction.Operand;
 
 			var underlyingType = GetUnderlyingType(type);
-			var isCompound = !IsPrimitive(underlyingType);
+			var isCompound = IsCompoundType(underlyingType);
 
 			if (isCompound)
 			{
-				var result = AllocateVirtualRegister(type);
+				//var result = AllocateVirtualRegister(type);
+				var result = MethodCompiler.AddStackLocal(type);
 				context.AppendInstruction(IRInstruction.LoadCompound, result, address, ConstantZero);
 				context.MosaType = type;
 				stack.Push(new StackEntry(StackType.ValueType, result, type));
@@ -2702,26 +3061,87 @@ namespace Mosa.Compiler.Framework.Stages
 
 				stack.Push(new StackEntry(stacktype, result));
 
-				var loadInstruction = GetLoadParamInstruction(elementType);
+				var loadInstruction = GetLoadInstruction(elementType);
 				context.AppendInstruction(loadInstruction, result, address, ConstantZero);
 
 				return Ldind(context, stack, elementType);
 			}
 		}
 
+		private bool Ldsfld(Context context, Stack<StackEntry> stack, MosaInstruction instruction)
+		{
+			var field = (MosaField)instruction.Operand;
+			var type = field.FieldType;
+
+			var underlyingType = GetUnderlyingType(type);
+			var isCompound = IsCompoundType(underlyingType);
+
+			var fieldOperand = Operand.CreateStaticField(field, TypeSystem);
+
+			if (isCompound)
+			{
+				var result = AllocateVirtualRegister(type);
+				context.AppendInstruction(IRInstruction.LoadCompound, result, fieldOperand, ConstantZero);
+				context.MosaType = type;
+				stack.Push(new StackEntry(StackType.ValueType, result, type));
+			}
+			else
+			{
+				var elementType = GetElementType(underlyingType);
+				var stacktype = GetStackType(elementType);
+				var result = AllocatedOperand(stacktype);
+
+				stack.Push(new StackEntry(stacktype, result));
+
+				var loadInstruction = GetLoadInstruction(elementType);
+
+				if (type.IsReferenceType)
+				{
+					var symbol = GetStaticSymbol(field);
+					var staticReference = Operand.CreateLabel(TypeSystem.BuiltIn.Object, symbol.Name);
+
+					context.SetInstruction(IRInstruction.LoadObject, result, staticReference, ConstantZero);
+				}
+				else
+				{
+					context.SetInstruction(loadInstruction, result, fieldOperand, ConstantZero);
+					context.MosaType = type;
+				}
+			}
+
+			return true;
+		}
+
+		private bool Ldsflda(Context context, Stack<StackEntry> stack, MosaInstruction instruction)
+		{
+			var field = (MosaField)instruction.Operand;
+
+			var result = AllocateVirtualRegisterManagedPointer();
+			var fieldOperand = Operand.CreateStaticField(field, TypeSystem);
+
+			context.AppendInstruction(IRInstruction.AddressOf, result, fieldOperand);
+
+			stack.Push(new StackEntry(StackType.ManagedPointer, result));   // FIXME: transient pointer or unmanaged pointer
+
+			MethodScanner.AccessedField(field);
+
+			return true;
+		}
+
 		private bool Ldstr(Context context, Stack<StackEntry> stack, MosaInstruction instruction)
 		{
 			var result = AllocateVirtualRegister(TypeSystem.BuiltIn.String);
-			stack.Push(new StackEntry(StackType.Object, result));
 
 			var token = (uint)instruction.Operand;
 
 			var stringdata = TypeSystem.LookupUserString(Method.Module, token);
 			var symbolName = EmitString(stringdata, token);
 
-			var symbol = Operand.CreateSymbol(TypeSystem.BuiltIn.String, symbolName);
+			var symbol = Operand.CreateStringSymbol(TypeSystem.BuiltIn.String, symbolName, MethodCompiler.Compiler.ObjectHeaderSize, stringdata);
 
 			context.AppendInstruction(IRInstruction.MoveObject, result, symbol);
+
+			stack.Push(new StackEntry(StackType.Object, result));
 
 			return true;
 		}
@@ -2861,7 +3281,7 @@ namespace Mosa.Compiler.Framework.Stages
 			int paramCount = method.Signature.Parameters.Count;
 
 			var underlyingType = GetUnderlyingType(classType);
-			var isCompound = !IsPrimitive(underlyingType);
+			var isCompound = IsCompoundType(underlyingType);
 			var stackType = underlyingType != null ? GetStackType(underlyingType) : StackType.ValueType;
 
 			var symbol = Operand.CreateSymbolFromMethod(method, TypeSystem);
@@ -2873,6 +3293,11 @@ namespace Mosa.Compiler.Framework.Stages
 				var param = stack.Pop();
 				operands.Add(param.Operand);
 			}
+
+			MethodScanner.TypeAllocated(classType, Method);
+
+			//if (ReplaceWithInternalCall(context))
+			//	return true;
 
 			if (stackType == StackType.Object)
 			{
@@ -2886,7 +3311,9 @@ namespace Mosa.Compiler.Framework.Stages
 				operands.Insert(0, result);
 
 				context.AppendInstruction(IRInstruction.CallStatic, null, symbol, operands);
-				context.InvokeMethod = method;
+
+				//context.InvokeMethod = method;  // optional??
+				context.MosaType = classType;   // optional??
 
 				stack.Push(new StackEntry(StackType.Object, result));
 
@@ -2894,42 +3321,44 @@ namespace Mosa.Compiler.Framework.Stages
 			}
 			else if (stackType == StackType.ValueType)  // iscompound?
 			{
-				var newThisLocal = MethodCompiler.AddStackLocal(classType);
-				var newThis = MethodCompiler.CreateVirtualRegister(classType.ToManagedPointer());
+				var newThisLocal = AddStackLocal(classType);
+				var newThis = AllocateVirtualRegisterManagedPointer();
 
 				context.AppendInstruction(IRInstruction.AddressOf, newThis, newThisLocal);
 
 				operands.Insert(0, newThis);
 
 				context.AppendInstruction(IRInstruction.CallStatic, null, symbol, operands);
-				context.InvokeMethod = method;
 
-				stack.Push(new StackEntry(StackType.ManagedPointer, newThis));   // ManagedPointer??
+				//context.InvokeMethod = method; // optional??
+
+				stack.Push(new StackEntry(StackType.ValueType, newThisLocal));
+
+				return true;
 			}
-			else if (stackType == StackType.Int32)
+			else if (stackType == StackType.Int32 || stackType == StackType.Int64)
 			{
-				// INCOMPLETE
-
-				var newThisLocal = MethodCompiler.AddStackLocal(classType);
-				var newThis = MethodCompiler.CreateVirtualRegister(classType.ToManagedPointer());
+				var newThisLocal = AddStackLocal(classType);
+				var newThis = AllocateVirtualRegisterManagedPointer();
 
 				context.AppendInstruction(IRInstruction.AddressOf, newThis, newThisLocal);
-
-				//context.AppendInstruction(IRInstruction.Load32,  )
 
 				operands.Insert(0, newThis);
 
 				context.AppendInstruction(IRInstruction.CallStatic, null, symbol, operands);
-				context.InvokeMethod = method;
+
+				//context.InvokeMethod = method;  // optional??
 
 				stack.Push(new StackEntry(StackType.ManagedPointer, newThis));   // ManagedPointer??
+
+				return true;
 			}
 			else if (stackType != StackType.ValueType)
 			{
 				// INCOMPLETE
 
-				var newThisLocal = MethodCompiler.AddStackLocal(classType);
-				var newThis = MethodCompiler.CreateVirtualRegister(classType.ToManagedPointer());
+				var newThisLocal = AddStackLocal(classType);
+				var newThis = AllocateVirtualRegisterManagedPointer();
 
 				context.AppendInstruction(IRInstruction.AddressOf, newThis, newThisLocal);
 
@@ -2938,12 +3367,19 @@ namespace Mosa.Compiler.Framework.Stages
 				operands.Insert(0, newThis);
 
 				context.AppendInstruction(IRInstruction.CallStatic, null, symbol, operands);
-				context.InvokeMethod = method;
+
+				//context.InvokeMethod = method;  // optional??
 
 				stack.Push(new StackEntry(StackType.ManagedPointer, newThis));   // ManagedPointer??
 			}
 
 			return false;
+		}
+
+		private bool Nop(Context context)
+		{
+			context.AppendInstruction(IRInstruction.Nop);
+			return true;
 		}
 
 		private bool Not(Context context, Stack<StackEntry> stack)
@@ -3197,6 +3633,15 @@ namespace Mosa.Compiler.Framework.Stages
 			return true;
 		}
 
+		private bool Rethrow(Context context, Stack<StackEntry> stack)
+		{
+			var entry = stack.Pop();
+
+			context.AppendInstruction(IRInstruction.Rethrow, entry.Operand);
+
+			return true;
+		}
+
 		private bool Shl(Context context, Stack<StackEntry> stack, MosaInstruction instruction)
 		{
 			var entry1 = stack.Pop();
@@ -3375,24 +3820,24 @@ namespace Mosa.Compiler.Framework.Stages
 			var value = entry1.Operand;
 
 			var type = (MosaType)instruction.Operand;
-			var underlyingType = GetUnderlyingType(type.ElementType);
-			var isCompound = !IsPrimitive(underlyingType);
+			var underlyingType = GetUnderlyingType(type);
+			var isCompound = IsCompoundType(underlyingType);
 
-			AddArrayBoundsCheck(context, array, index);
+			context.AppendInstruction(IRInstruction.CheckArrayBounds, null, array, index);
 
-			var elementOffset = CalculateArrayElementOffset(context, type.ElementType, index);
+			var elementOffset = CalculateArrayElementOffset(context, type, index);
 			var totalElementOffset = CalculateTotalArrayOffset(context, elementOffset);
 
 			if (isCompound)
 			{
 				context.AppendInstruction(IRInstruction.StoreCompound, null, array, totalElementOffset);
-				context.MosaType = type.ElementType;
+				context.MosaType = type;
 
 				return true;
 			}
 			else
 			{
-				var stacktype = GetStackType(type.ElementType);
+				var stacktype = GetStackType(underlyingType);
 				var elementType = GetElementType(stacktype);
 				var storeInstruction = GetStoreInstruction(elementType);
 
@@ -3412,7 +3857,7 @@ namespace Mosa.Compiler.Framework.Stages
 			var array = entry2.Operand;
 			var value = entry1.Operand;
 
-			AddArrayBoundsCheck(context, array, index);
+			context.AppendInstruction(IRInstruction.CheckArrayBounds, null, array, index);
 
 			var elementOffset = CalculateArrayElementOffset(context, GetSize(elementType), index);
 			var totalElementOffset = CalculateTotalArrayOffset(context, elementOffset);
@@ -3422,6 +3867,62 @@ namespace Mosa.Compiler.Framework.Stages
 			context.AppendInstruction(storeInstruction, null, array, totalElementOffset, value);
 
 			return true;
+		}
+
+		private bool Stfld(Context context, Stack<StackEntry> stack, MosaInstruction instruction)
+		{
+			var entry1 = stack.Pop();
+			var entry2 = stack.Pop();
+
+			var field = (MosaField)instruction.Operand;
+			uint offset = TypeLayout.GetFieldOffset(field);
+			var type = field.FieldType;
+
+			switch (entry1.StackType)
+			{
+				case StackType.Int32:
+				case StackType.Int64:
+				case StackType.R4:
+				case StackType.R8:
+				case StackType.ManagedPointer:
+				case StackType.Object:
+					{
+						var underlyingType = GetUnderlyingType(type);
+						var isCompound = IsCompoundType(underlyingType);
+
+						if (isCompound)
+						{
+							context.AppendInstruction(IRInstruction.StoreCompound, null, entry2.Operand, CreateConstant32(offset), entry1.Operand);
+							context.MosaType = type;
+
+							return true;
+						}
+						else
+						{
+							var stacktype = underlyingType != null ? GetStackType(underlyingType) : StackType.ValueType;
+							var elementType = GetElementType(stacktype);
+							var storeInstruction = GetStoreInstruction(elementType);
+
+							context.AppendInstruction(storeInstruction, null, entry2.Operand, CreateConstant32(offset), entry1.Operand);
+
+							//context.MosaType = type;
+
+							return true;
+						}
+					}
+				case StackType.ValueType:
+					{
+						//var underlyingType = GetUnderlyingType(type);
+						//var isCompound = IsCompoundType(underlyingType);
+
+						context.AppendInstruction(IRInstruction.StoreCompound, null, entry2.Operand, CreateConstant32(offset), entry1.Operand);
+						context.MosaType = type;
+
+						return true;
+					}
+
+				default: return false;
+			}
 		}
 
 		private bool Stind(Context context, Stack<StackEntry> stack, ElementType elementType)
@@ -3448,7 +3949,7 @@ namespace Mosa.Compiler.Framework.Stages
 
 			if (stacktype == StackType.ValueType)
 			{
-				context.AppendInstruction(IRInstruction.StoreCompound, null, local, source);
+				context.AppendInstruction(IRInstruction.MoveCompound, local, source);
 				context.MosaType = local.Type;
 
 				return true;
@@ -3518,7 +4019,7 @@ namespace Mosa.Compiler.Framework.Stages
 
 			var type = (MosaType)instruction.Operand;
 			var underlyingType = GetUnderlyingType(type);
-			bool isCompound = !IsPrimitive(underlyingType);
+			bool isCompound = IsCompoundType(underlyingType);
 
 			if (isCompound)
 			{
@@ -3536,6 +4037,49 @@ namespace Mosa.Compiler.Framework.Stages
 			}
 		}
 
+		private bool Stsfld(Context context, Stack<StackEntry> stack, MosaInstruction instruction)
+		{
+			var entry = stack.Pop();
+			var source = entry.Operand;
+
+			var field = (MosaField)instruction.Operand;
+			var type = field.FieldType;
+
+			var underlyingType = GetUnderlyingType(type);
+			var isCompound = IsCompoundType(underlyingType);
+
+			var fieldOperand = Operand.CreateStaticField(field, TypeSystem);
+
+			if (isCompound)
+			{
+				context.AppendInstruction(IRInstruction.StoreCompound, null, fieldOperand, ConstantZero, source);
+				context.MosaType = type;
+			}
+			else
+			{
+				var elementType = GetElementType(underlyingType);
+
+				var storeInstruction = GetStoreInstruction(elementType);
+
+				if (type.IsReferenceType)
+				{
+					var symbol = GetStaticSymbol(field);
+					var staticReference = Operand.CreateLabel(TypeSystem.BuiltIn.Object, symbol.Name);
+
+					context.AppendInstruction(IRInstruction.StoreObject, null, staticReference, ConstantZero);
+
+					//context.MosaType = type;
+				}
+				else
+				{
+					context.AppendInstruction(storeInstruction, null, fieldOperand, ConstantZero, source);
+					context.MosaType = type;
+				}
+			}
+
+			return true;
+		}
+
 		private bool StoreArgument(Context context, Stack<StackEntry> stack, int index)
 		{
 			var entry = stack.Pop();
@@ -3545,7 +4089,7 @@ namespace Mosa.Compiler.Framework.Stages
 			var parameter = MethodCompiler.Parameters[index];
 			var type = parameter.Type;
 			var underlyingType = GetUnderlyingType(type);
-			var isCompound = !IsPrimitive(underlyingType);
+			var isCompound = IsCompoundType(underlyingType);
 
 			if (isCompound)
 			{
@@ -3695,6 +4239,25 @@ namespace Mosa.Compiler.Framework.Stages
 			return false;
 		}
 
+		private bool Switch(Context context, Stack<StackEntry> stack, MosaInstruction instruction)
+		{
+			var entry = stack.Pop();
+
+			context.AppendInstruction(IRInstruction.Switch, null, entry.Operand);
+
+			foreach (var target in (int[])instruction.Operand)
+			{
+				var block = BasicBlocks.GetByLabel(target);
+
+				context.AddBranchTarget(block);
+			}
+
+			// REFERENCE: The last value is the fall thru - this is not implemented correctly in later stages (fixme)
+			context.AddBranchTarget(BasicBlocks.GetByLabel(instruction.Next.Value));
+
+			return true;
+		}
+
 		private bool Unbox(Context context, Stack<StackEntry> stack, MosaInstruction instruction)
 		{
 			var entry = stack.Pop();
@@ -3750,10 +4313,20 @@ namespace Mosa.Compiler.Framework.Stages
 			else
 			{
 				var result = AllocatedOperand(StackType.ValueType, type);
-				var source = AllocateVirtualRegisterManagedPointer();
 
-				context.AppendInstruction(IRInstruction.AddressOf, source, entry.Operand);
-				context.AppendInstruction(IRInstruction.LoadCompound, result, source, ConstantZero);
+				//var tmpLocal = AddStackLocal(type);
+				//var typeSize = Alignment.AlignUp(TypeLayout.GetTypeSize(type), TypeLayout.NativePointerAlignment);
+
+				//var adr = AllocateVirtualRegisterManagedPointer();
+				//context.AppendInstruction(IRInstruction.AddressOf, adr, tmpLocal);
+				//context.AppendInstruction(IRInstruction.UnboxAny, tmpLocal, entry.Operand, adr, CreateConstant32(typeSize));
+				//context.AppendInstruction(IRInstruction.LoadCompound, result, tmpLocal, ConstantZero);
+
+				//context.AppendInstruction(IRInstruction.LoadCompound, result, tmpLocal, ConstantZero);
+
+				var adr = AllocateVirtualRegisterManagedPointer();
+				context.AppendInstruction(IRInstruction.Unbox, adr, entry.Operand);
+				context.AppendInstruction(IRInstruction.LoadCompound, result, adr, ConstantZero);
 
 				stack.Push(new StackEntry(StackType.ValueType, result, type));
 				return true;
@@ -3810,6 +4383,11 @@ namespace Mosa.Compiler.Framework.Stages
 
 		#endregion CIL
 
+		public LinkerSymbol GetStaticSymbol(MosaField field)
+		{
+			return Linker.DefineSymbol($"{Metadata.StaticSymbolPrefix}{field.DeclaringType}+{field.Name}", SectionKind.BSS, Architecture.NativeAlignment, NativePointerSize);
+		}
+
 		#region Array Helpers
 
 		/// <summary>
@@ -3829,13 +4407,11 @@ namespace Mosa.Compiler.Framework.Stages
 			if (Is32BitPlatform)
 			{
 				lengthOperand = AllocateVirtualRegisterI32();
-
 				context.AppendInstruction(IRInstruction.Load32, lengthOperand, arrayOperand, ConstantZero32);
 			}
 			else
 			{
 				lengthOperand = AllocateVirtualRegisterI64();
-
 				context.AppendInstruction(IRInstruction.Load64, lengthOperand, arrayOperand, ConstantZero64);
 			}
 
@@ -3908,7 +4484,7 @@ namespace Mosa.Compiler.Framework.Stages
 		/// </returns>
 		private Operand CalculateTotalArrayOffset(Context context, Operand elementOffset)
 		{
-			var fixedOffset = CreateConstant32(NativePointerSize * 3);
+			var fixedOffset = CreateConstant32(NativePointerSize);
 			var arrayElement = Is32BitPlatform ? AllocateVirtualRegisterI32() : AllocateVirtualRegisterI64();
 
 			if (Is32BitPlatform)

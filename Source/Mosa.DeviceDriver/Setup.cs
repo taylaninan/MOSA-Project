@@ -24,16 +24,6 @@ namespace Mosa.DeviceDriver
 
 				new ISADeviceDriverRegistryEntry()
 				{
-					Name = "CMOS",
-					Platforms = PlatformArchitecture.X86,
-					AutoLoad = true,
-					BasePort = 0x0070,
-					PortRange = 2,
-					Factory = delegate { return new ISA.CMOS(); }
-				},
-
-				new ISADeviceDriverRegistryEntry()
-				{
 					Name = "StandardKeyboard",
 					Platforms = PlatformArchitecture.X86AndX64,
 					AutoLoad = true,
@@ -44,19 +34,6 @@ namespace Mosa.DeviceDriver
 					IRQ = 1,
 					Factory = delegate { return new ISA.StandardKeyboard(); }
 				},
-
-				// TODO
-				/*new ISADeviceDriverRegistryEntry()
-				{
-					Name = "PIT",
-					Platforms = PlatformArchitecture.X86AndX64,
-					AutoLoad = true,
-					BasePort = 0x40,
-					PortRange = 1,
-					AltBasePort = 0x43,
-					AltPortRange = 1,
-					Factory = delegate { return new ISA.PIT(); }
-				},*/
 
 				new ISADeviceDriverRegistryEntry()
 				{
@@ -118,6 +95,17 @@ namespace Mosa.DeviceDriver
 				//	Factory = delegate { return new VGAText(); }
 				//},
 
+				/*new PCIDeviceDriverRegistryEntry()
+				{
+					Name = "NVMe",
+					Platforms = PlatformArchitecture.X86AndX64,
+					BusType = DeviceBusType.PCI,
+					ClassCode = 0x01,
+					SubClassCode = 0x08,
+					PCIFields = PCIField.ClassCode | PCIField.SubClassCode,
+					Factory = delegate { return new PCI.NVMe(); }
+				},*/
+
 				new PCIDeviceDriverRegistryEntry()
 				{
 					Name = "VMwareSVGA2",
@@ -126,8 +114,6 @@ namespace Mosa.DeviceDriver
 					VendorID = 0x15AD,
 					DeviceID = 0x0405,
 					PCIFields = PCIField.VendorID | PCIField.DeviceID,
-
-					AutoStart = false,
 					Factory = delegate { return new PCI.VMware.VMwareSVGA2(); }
 				},
 

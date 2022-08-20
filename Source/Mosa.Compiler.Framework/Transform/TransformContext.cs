@@ -1,6 +1,7 @@
 ﻿// Copyright (c) MOSA Project. Licensed under the New BSD License.
 
 using Mosa.Compiler.Common;
+using Mosa.Compiler.Framework.Analysis;
 using Mosa.Compiler.Framework.Trace;
 using Mosa.Compiler.MosaTypeSystem;
 using System;
@@ -12,7 +13,10 @@ namespace Mosa.Compiler.Framework.Transform
 	public sealed class TransformContext
 	{
 		public MethodCompiler MethodCompiler { get; private set; }
+
 		public Compiler Compiler { get; private set; }
+
+		public BitValueManager BitValueManager { get; private set; }
 
 		public TypeSystem TypeSystem { get; private set; }
 
@@ -41,10 +45,11 @@ namespace Mosa.Compiler.Framework.Transform
 
 		public int Window { get; private set; }
 
-		public TransformContext(MethodCompiler methodCompiler)
+		public TransformContext(MethodCompiler methodCompiler, BitValueManager bitValueManager = null)
 		{
 			MethodCompiler = methodCompiler;
 			Compiler = methodCompiler.Compiler;
+			BitValueManager = bitValueManager;
 
 			TypeSystem = Compiler.TypeSystem;
 
@@ -66,6 +71,11 @@ namespace Mosa.Compiler.Framework.Transform
 			LowerTo32 = Compiler.CompilerSettings.LongExpansion;
 
 			Window = Math.Max(Compiler.CompilerSettings.OptimizationWindow, 1);
+		}
+
+		public void SetLog(TraceLog traceLog)
+		{
+			TraceLog = traceLog;
 		}
 
 		public void SetLogs(TraceLog traceLog = null, TraceLog specialTraceLog = null)
@@ -110,17 +120,12 @@ namespace Mosa.Compiler.Framework.Transform
 			return VirtualRegisters.Allocate(O);
 		}
 
-		public bool ApplyTransform(Context context, BaseTransformation transformation, List<Operand> virtualRegisters = null)
+		public bool ApplyTransform(Context context, BaseTransformation transformation)
 		{
 			if (!transformation.Match(context, this))
 				return false;
 
 			TraceBefore(context, transformation);
-
-			if (virtualRegisters != null)
-			{
-				CollectVirtualRegisters(context, virtualRegisters);
-			}
 
 			transformation.Transform(context, this);
 
@@ -128,26 +133,6 @@ namespace Mosa.Compiler.Framework.Transform
 
 			return true;
 		}
-
-		#region WorkList
-
-		private static void CollectVirtualRegisters(Context context, List<Operand> virtualRegisters)
-		{
-			if (context.Result != null)
-			{
-				virtualRegisters.AddIfNew(context.Result);
-			}
-			if (context.Result2 != null)
-			{
-				virtualRegisters.AddIfNew(context.Result2);
-			}
-			foreach (var operand in context.Operands)
-			{
-				virtualRegisters.AddIfNew(operand);
-			}
-		}
-
-		#endregion WorkList
 
 		#region Trace
 
@@ -271,62 +256,53 @@ namespace Mosa.Compiler.Framework.Transform
 
 		#endregion Basic Block Helpers
 
-		public static void UpdatePHIInstructionTarget(BasicBlock target, BasicBlock source, BasicBlock newSource)
+		#region Phi Helpers
+
+		public static void UpdatePhiTarget(BasicBlock target, BasicBlock source, BasicBlock newSource)
 		{
-			BaseMethodCompilerStage.UpdatePHIInstructionTarget(target, source, newSource);
+			BaseMethodCompilerStage.UpdatePhiTarget(target, source, newSource);
 		}
 
-		public static void UpdatePHIInstructionTargets(List<BasicBlock> targets, BasicBlock source, BasicBlock newSource)
+		public static void UpdatePhiTargets(List<BasicBlock> targets, BasicBlock source, BasicBlock newSource)
 		{
-			BaseMethodCompilerStage.UpdatePHIInstructionTargets(targets, source, newSource);
+			BaseMethodCompilerStage.UpdatePhiTargets(targets, source, newSource);
 		}
 
-		public static void RemoveBlocksFromPHIInstructions(BasicBlock removedBlock, BasicBlock[] phiBlocks)
+		public static void UpdatePhiBlocks(List<BasicBlock> phiBlocks)
 		{
-			BaseMethodCompilerStage.RemoveBlocksFromPHIInstructions(removedBlock, phiBlocks);
+			BaseMethodCompilerStage.UpdatePhiBlocks(phiBlocks);
 		}
 
-		public static void RemoveBlockFromPHIInstructions(BasicBlock removedBlock, BasicBlock phiBlock)
+		public static void UpdatePhiBlock(BasicBlock phiBlock)
 		{
-			BaseMethodCompilerStage.RemoveBlockFromPHIInstructions(removedBlock, phiBlock);
+			BaseMethodCompilerStage.UpdatePhiBlock(phiBlock);
 		}
 
-		public void UpdatePHI(Context context)
+		public static void UpdatePhi(InstructionNode node)
 		{
-			Debug.Assert(context.OperandCount != context.Block.PreviousBlocks.Count);
-
-			// One or more of the previous blocks was removed, fix up the operand blocks
-
-			var node = context.Node;
-			var previousBlocks = node.Block.PreviousBlocks;
-			var phiBlocks = node.PhiBlocks;
-
-			for (int index = 0; index < node.OperandCount; index++)
-			{
-				var phiBlock = phiBlocks[index];
-
-				if (previousBlocks.Contains(phiBlock))
-					continue;
-
-				phiBlocks.RemoveAt(index);
-
-				for (int i = index; index < node.OperandCount - 1; index++)
-				{
-					context.SetOperand(i, node.GetOperand(i + 1));
-				}
-
-				context.SetOperand(node.OperandCount - 1, null);
-				node.OperandCount--;
-
-				index--;
-			}
-
-			Debug.Assert(context.OperandCount == context.Block.PreviousBlocks.Count);
+			BaseMethodCompilerStage.UpdatePhi(node);
 		}
+
+		public static void UpdatePhi(Context context)
+		{
+			BaseMethodCompilerStage.UpdatePhi(context);
+		}
+
+		#endregion Phi Helpers
 
 		public void SplitLongOperand(Operand operand, out Operand operandLow, out Operand operandHigh)
 		{
 			MethodCompiler.SplitLongOperand(operand, out operandLow, out operandHigh);
+		}
+
+		public BitValue GetBitValue(Operand operand)
+		{
+			return BitValueManager.GetBitValue(operand);
+		}
+
+		public BitValue GetBitValueWithDefault(Operand operand)
+		{
+			return BitValueManager.GetBitValueWithDefault(operand);
 		}
 	}
 }

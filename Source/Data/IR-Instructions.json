@@ -63,6 +63,20 @@
 			"Commutative": "false"
 		},
 		{
+			"Name": "AddOverflowOut32",
+			"FamilyName": "IR",
+			"ResultCount": 2,
+			"OperandCount": 2,
+			"Commutative": "true"
+		},
+		{
+			"Name": "AddOverflowOut64",
+			"FamilyName": "IR",
+			"ResultCount": 2,
+			"OperandCount": 2,
+			"Commutative": "true"
+		},
+		{
 			"Name": "ArithShiftRight32",
 			"FamilyName": "IR",
 			"ResultCount": 1,
@@ -863,6 +877,34 @@
 			"OperandCount": 1
 		},
 		{
+			"Name": "MulCarryOut32",
+			"FamilyName": "IR",
+			"ResultCount": 2,
+			"OperandCount": 2,
+			"Commutative": "true"
+		},
+		{
+			"Name": "MulCarryOut64",
+			"FamilyName": "IR",
+			"ResultCount": 2,
+			"OperandCount": 2,
+			"Commutative": "true"
+		},
+		{
+			"Name": "MulOverflowOut32",
+			"FamilyName": "IR",
+			"ResultCount": 2,
+			"OperandCount": 2,
+			"Commutative": "true"
+		},
+		{
+			"Name": "MulOverflowOut64",
+			"FamilyName": "IR",
+			"ResultCount": 2,
+			"OperandCount": 2,
+			"Commutative": "true"
+		},
+		{
 			"Name": "MulR4",
 			"FamilyName": "IR",
 			"ResultCount": 1,
@@ -1255,6 +1297,20 @@
 			"Commutative": "false"
 		},
 		{
+			"Name": "SubOverflowOut32",
+			"FamilyName": "IR",
+			"ResultCount": 2,
+			"OperandCount": 2,
+			"Commutative": "false"
+		},
+		{
+			"Name": "SubOverflowOut64",
+			"FamilyName": "IR",
+			"ResultCount": 2,
+			"OperandCount": 2,
+			"Commutative": "false"
+		},
+		{
 			"Name": "Switch",
 			"FamilyName": "IR",
 			"ResultCount": 0,
@@ -1436,6 +1492,12 @@
 			"FamilyName": "IR",
 			"ResultCount": 1,
 			"OperandCount": 1
+		},
+		{
+			"Name": "CheckArrayBounds",
+			"FamilyName": "IR",
+			"ResultCount": 2,
+			"OperandCount": 0
 		}
 	]
 }

@@ -1,5 +1,7 @@
 ﻿// Copyright (c) MOSA Project. Licensed under the New BSD License.
 
+using System.Runtime.CompilerServices;
+
 namespace Mosa.UnitTests.Other
 {
 	public static class SpecificTests
@@ -162,6 +164,85 @@ namespace Mosa.UnitTests.Other
 		{
 			ulong self = 0x00004000;
 			return self.SetBits(12, 52, 0x00000007, 12);
+		}
+
+		[MosaUnitTest((ulong)9)]
+		public static long I8ShrBy52(long x)
+		{
+			return x >> 52;
+		}
+
+		[MosaUnitTest((ulong)9)]
+		[MosaUnitTest(ulong.MaxValue)]
+		public static ulong U8ShrBy52(ulong x)
+		{
+			return x >> 52;
+		}
+
+		[MosaUnitTest((ulong)9)]
+		[MosaUnitTest(ulong.MaxValue)]
+		public static ulong U8ShrBy30(ulong x)
+		{
+			return x >> 30;
+		}
+
+		[MosaUnitTest((ulong)9)]
+		[MosaUnitTest(ulong.MaxValue)]
+		public static ulong U8ShrBy31(ulong x)
+		{
+			return x >> 31;
+		}
+
+		[MosaUnitTest(9, 9)]
+		[MosaUnitTest(int.MaxValue, 9)]
+		[MosaUnitTest(int.MaxValue, int.MaxValue)]
+		public static bool BranchingEqI4(int x, int y)
+		{
+			var result = false;
+			if (x == y)
+			{
+				result = true;
+			}
+			return result;
+		}
+
+		[MosaUnitTest(9u, 9u)]
+		[MosaUnitTest(uint.MaxValue, 9u)]
+		[MosaUnitTest(uint.MaxValue, uint.MaxValue)]
+		public static bool BranchingEqU4(uint x, uint y)
+		{
+			var result = false;
+			if (x == y)
+			{
+				result = true;
+			}
+			return result;
+		}
+
+		[MosaUnitTest(9L, 9L)]
+		[MosaUnitTest(long.MaxValue, 9L)]
+		[MosaUnitTest(long.MaxValue, long.MaxValue)]
+		public static bool BranchingEqI8(long x, long y)
+		{
+			var result = false;
+			if (x == y)
+			{
+				result = true;
+			}
+			return result;
+		}
+
+		[MosaUnitTest(9uL, 9uL)]
+		[MosaUnitTest(ulong.MaxValue, 9uL)]
+		[MosaUnitTest(ulong.MaxValue, ulong.MaxValue)]
+		public static bool BranchingEqU8(ulong x, ulong y)
+		{
+			var result = false;
+			if (x == y)
+			{
+				result = true;
+			}
+			return result;
 		}
 	}
 

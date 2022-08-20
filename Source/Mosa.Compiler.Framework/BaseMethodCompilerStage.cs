@@ -29,7 +29,8 @@ namespace Mosa.Compiler.Framework
 		/// Retrieves the name of the compilation stage.
 		/// </summary>
 		/// <value>The name of the compilation stage.</value>
-		public virtual string Name { get { return GetType().Name; } }
+		public virtual string Name
+		{ get { return GetType().Name; } }
 
 		/// <summary>
 		/// Gets or sets the name of the formatted stage.
@@ -138,82 +139,98 @@ namespace Mosa.Compiler.Framework
 		/// <summary>
 		/// Gets the method data.
 		/// </summary>
-		protected MethodData MethodData { get { return MethodCompiler.MethodData; } }
+		protected MethodData MethodData
+		{ get { return MethodCompiler.MethodData; } }
 
 		/// <summary>
 		/// Gets the linker.
 		/// </summary>
-		protected MosaLinker Linker { get { return MethodCompiler.Linker; } }
+		protected MosaLinker Linker
+		{ get { return MethodCompiler.Linker; } }
 
 		/// <summary>
 		/// Gets the type of the platform internal runtime.
 		/// </summary>
-		public MosaType PlatformInternalRuntimeType { get { return MethodCompiler.Compiler.PlatformInternalRuntimeType; } }
+		public MosaType PlatformInternalRuntimeType
+		{ get { return MethodCompiler.Compiler.PlatformInternalRuntimeType; } }
 
 		/// <summary>
 		/// Gets the type of the internal runtime.
 		/// </summary>
-		public MosaType InternalRuntimeType { get { return MethodCompiler.Compiler.InternalRuntimeType; } }
+		public MosaType InternalRuntimeType
+		{ get { return MethodCompiler.Compiler.InternalRuntimeType; } }
 
 		/// <summary>
 		/// Gets the method.
 		/// </summary>
-		protected MosaMethod Method { get { return MethodCompiler.Method; } }
+		protected MosaMethod Method
+		{ get { return MethodCompiler.Method; } }
 
 		/// <summary>
 		/// Gets the constant zero.
 		/// </summary>
-		protected Operand ConstantZero { get { return MethodCompiler.ConstantZero; } }
+		protected Operand ConstantZero
+		{ get { return MethodCompiler.ConstantZero; } }
 
 		/// <summary>
 		/// Gets the 32-bit constant zero.
 		/// </summary>
-		protected Operand ConstantZero32 { get { return MethodCompiler.ConstantZero; } }
+		protected Operand ConstantZero32
+		{ get { return MethodCompiler.ConstantZero; } }
 
 		/// <summary>
 		/// Gets the 64-bit constant zero.
 		/// </summary>
-		protected Operand ConstantZero64 { get { return MethodCompiler.ConstantZero; } }
+		protected Operand ConstantZero64
+		{ get { return MethodCompiler.ConstantZero; } }
 
 		/// <summary>
 		/// Gets the stack frame.
 		/// </summary>
-		protected Operand StackFrame { get { return MethodCompiler.Compiler.StackFrame; } }
+		protected Operand StackFrame
+		{ get { return MethodCompiler.Compiler.StackFrame; } }
 
 		/// <summary>
 		/// Gets the stack pointer.
 		/// </summary>
-		protected Operand StackPointer { get { return MethodCompiler.Compiler.StackPointer; } }
+		protected Operand StackPointer
+		{ get { return MethodCompiler.Compiler.StackPointer; } }
 
 		/// <summary>
 		/// Gets the link register.
 		/// </summary>
-		protected Operand LinkRegister { get { return MethodCompiler.Compiler.LinkRegister; } }
+		protected Operand LinkRegister
+		{ get { return MethodCompiler.Compiler.LinkRegister; } }
 
 		/// <summary>
 		/// Gets the program counter
 		/// </summary>
-		protected Operand ProgramCounter { get { return MethodCompiler.Compiler.ProgramCounter; } }
+		protected Operand ProgramCounter
+		{ get { return MethodCompiler.Compiler.ProgramCounter; } }
 
 		/// <summary>
 		/// Gets the exception register.
 		/// </summary>
-		protected Operand ExceptionRegister { get { return MethodCompiler.Compiler.ExceptionRegister; } }
+		protected Operand ExceptionRegister
+		{ get { return MethodCompiler.Compiler.ExceptionRegister; } }
 
 		/// <summary>
 		/// Gets the leave target register.
 		/// </summary>
-		protected Operand LeaveTargetRegister { get { return MethodCompiler.Compiler.LeaveTargetRegister; } }
+		protected Operand LeaveTargetRegister
+		{ get { return MethodCompiler.Compiler.LeaveTargetRegister; } }
 
 		/// <summary>
 		/// Gets a value indicating whether this instance has protected regions.
 		/// </summary>
-		protected bool HasProtectedRegions { get { return MethodCompiler.HasProtectedRegions; } }
+		protected bool HasProtectedRegions
+		{ get { return MethodCompiler.HasProtectedRegions; } }
 
 		/// <summary>
 		/// Gets a value indicating whether this instance has code.
 		/// </summary>
-		protected bool HasCode { get { return BasicBlocks.HeadBlocks.Count != 0; } }
+		protected bool HasCode
+		{ get { return BasicBlocks.HeadBlocks.Count != 0; } }
 
 		/// <summary>
 		/// The counters
@@ -320,6 +337,11 @@ namespace Mosa.Compiler.Framework
 
 			MethodCompiler = null;
 			traceLogs = null;
+		}
+
+		public Operand AddStackLocal(MosaType type, bool pinned = false)
+		{
+			return MethodCompiler.AddStackLocal(type, pinned);
 		}
 
 		protected Operand AllocateVirtualRegister(MosaType type)
@@ -523,7 +545,7 @@ namespace Mosa.Compiler.Framework
 		/// <returns>
 		///   <c>true</c> if [is empty block with single jump] [the specified block]; otherwise, <c>false</c>.
 		/// </returns>
-		protected bool IsEmptyBlockWithSingleJump(BasicBlock block)
+		protected static bool IsEmptyBlockWithSingleJump(BasicBlock block)
 		{
 			if (block.NextBlocks.Count != 1)
 				return false;
@@ -575,7 +597,7 @@ namespace Mosa.Compiler.Framework
 		/// <param name="target">The current from block.</param>
 		/// <param name="oldTarget">The current destination block.</param>
 		/// <param name="newTarget">The new target block.</param>
-		protected void ReplaceBranchTargets(BasicBlock target, BasicBlock oldTarget, BasicBlock newTarget)
+		protected static void ReplaceBranchTargets(BasicBlock target, BasicBlock oldTarget, BasicBlock newTarget)
 		{
 			for (var node = target.BeforeLast; !node.IsBlockStartInstruction; node = node.Previous)
 			{
@@ -599,7 +621,7 @@ namespace Mosa.Compiler.Framework
 			}
 		}
 
-		protected void RemoveEmptyBlockWithSingleJump(BasicBlock block, bool useNop = false)
+		protected static void RemoveEmptyBlockWithSingleJump(BasicBlock block, bool useNop = false)
 		{
 			Debug.Assert(block.NextBlocks.Count == 1);
 
@@ -615,7 +637,76 @@ namespace Mosa.Compiler.Framework
 			Debug.Assert(block.PreviousBlocks.Count == 0);
 		}
 
-		public static void RemoveBlockFromPHIInstructions(BasicBlock removedBlock, BasicBlock phiBlock)
+		#region Phi Helpers
+
+		public static void UpdatePhiBlocks(BasicBlock[] phiBlocks)
+		{
+			foreach (var phiBlock in phiBlocks)
+			{
+				UpdatePhiBlock(phiBlock);
+			}
+		}
+
+		public static void UpdatePhiBlocks(List<BasicBlock> phiBlocks)
+		{
+			foreach (var phiBlock in phiBlocks)
+			{
+				UpdatePhiBlock(phiBlock);
+			}
+		}
+
+		public static void UpdatePhiBlock(BasicBlock phiBlock)
+		{
+			for (var node = phiBlock.AfterFirst; !node.IsBlockEndInstruction; node = node.Next)
+			{
+				if (node.IsEmptyOrNop)
+					continue;
+
+				if (!BaseMethodCompilerStage.IsPhiInstruction(node.Instruction))
+					break;
+
+				UpdatePhi(node);
+			}
+		}
+
+		public static void UpdatePhi(InstructionNode node)
+		{
+			Debug.Assert(node.OperandCount != node.Block.PreviousBlocks.Count);
+
+			// One or more of the previous blocks was removed, fix up the operand blocks
+
+			var previousBlocks = node.Block.PreviousBlocks;
+			var phiBlocks = node.PhiBlocks;
+
+			for (int index = 0; index < node.OperandCount; index++)
+			{
+				var phiBlock = phiBlocks[index];
+
+				if (previousBlocks.Contains(phiBlock))
+					continue;
+
+				phiBlocks.RemoveAt(index);
+
+				for (int i = index; index < node.OperandCount - 1; index++)
+				{
+					node.SetOperand(i, node.GetOperand(i + 1));
+				}
+
+				node.SetOperand(node.OperandCount - 1, null);
+				node.OperandCount--;
+
+				index--;
+			}
+
+			Debug.Assert(node.OperandCount == node.Block.PreviousBlocks.Count);
+		}
+
+		public static void UpdatePhi(Context context)
+		{
+			UpdatePhi(context.Node);
+		}
+
+		public static void RemoveBlockFromPhi(BasicBlock removedBlock, BasicBlock phiBlock)
 		{
 			for (var node = phiBlock.AfterFirst; !node.IsBlockEndInstruction; node = node.Next)
 			{
@@ -644,25 +735,15 @@ namespace Mosa.Compiler.Framework
 			}
 		}
 
-		public static void RemoveBlocksFromPHIInstructions(BasicBlock removedBlock, BasicBlock[] nextBlocks)
-		{
-			foreach (var next in nextBlocks)
-			{
-				RemoveBlockFromPHIInstructions(removedBlock, next);
-			}
-
-			//Debug.Assert(removedBlock.NextBlocks.Count == 0);
-		}
-
-		public static void UpdatePHIInstructionTargets(List<BasicBlock> targets, BasicBlock source, BasicBlock newSource)
+		public static void UpdatePhiTargets(List<BasicBlock> targets, BasicBlock source, BasicBlock newSource)
 		{
 			foreach (var target in targets)
 			{
-				UpdatePHIInstructionTarget(target, source, newSource);
+				UpdatePhiTarget(target, source, newSource);
 			}
 		}
 
-		public static void UpdatePHIInstructionTarget(BasicBlock phiBlock, BasicBlock source, BasicBlock newSource)
+		public static void UpdatePhiTarget(BasicBlock phiBlock, BasicBlock source, BasicBlock newSource)
 		{
 			Debug.Assert(phiBlock.PreviousBlocks.Count > 0);
 
@@ -697,6 +778,8 @@ namespace Mosa.Compiler.Framework
 
 			return false;
 		}
+
+		#endregion Phi Helpers
 
 		#endregion Block Operations
 
@@ -734,7 +817,7 @@ namespace Mosa.Compiler.Framework
 			return null;
 		}
 
-		protected BasicBlock TraverseBackToNativeBlock(BasicBlock block)
+		protected static BasicBlock TraverseBackToNativeBlock(BasicBlock block)
 		{
 			var start = block;
 

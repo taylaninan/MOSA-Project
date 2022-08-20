@@ -1,17 +1,17 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
 		<OutputType>Exe</OutputType>
-		<TargetFramework>net5.0</TargetFramework>
+		<TargetFramework>net6.0</TargetFramework>
 		<AssemblyTitle>Mosa.Compiler.Framework.xUnit</AssemblyTitle>
 		<Company>MOSA Project</Company>
 		<Product>Mosa.Compiler.Framework.xUnit</Product>
-		<Copyright>Copyright © MOSA Project 2021</Copyright>
+		<Copyright>Copyright © MOSA Project 2022</Copyright>
 		<BaseAddress>285212672</BaseAddress>
 		<RegisterForComInterop>False</RegisterForComInterop>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<DebugType>full</DebugType>
 		<RemoveIntegerChecks>False</RemoveIntegerChecks>
-		<LangVersion>8.0</LangVersion>
+		<LangVersion>10.0</LangVersion>
 		<FileAlignment>4096</FileAlignment>
 		<OutputPath>..\..\bin\</OutputPath>
 		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
@@ -25,7 +25,7 @@
 		<WarningLevel>2</WarningLevel>
 	</PropertyGroup>
 	<ItemGroup>
-		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.11.0" />
+		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.0.0" />
 		<PackageReference Include="xunit" Version="2.4.1" />
 		<PackageReference Include="xunit.abstractions" Version="2.0.3" />
 		<PackageReference Include="xunit.analyzers" Version="0.10.0" />

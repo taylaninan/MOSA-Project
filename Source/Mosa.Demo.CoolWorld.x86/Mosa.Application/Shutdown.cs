@@ -1,7 +1,7 @@
 ﻿// Copyright (c) MOSA Project. Licensed under the New BSD License.
 
 using Mosa.Demo.AppSystem;
-using Mosa.DeviceSystem;
+using Mosa.DeviceSystem.Service;
 
 namespace Mosa.Demo.Application
 {
@@ -14,7 +14,7 @@ namespace Mosa.Demo.Application
 		{
 			Console.WriteLine("Shutting down...");
 
-			var pc = AppManager.ServiceManager.GetFirstService<PCService>() as PCService;
+			var pc = AppManager.ServiceManager.GetFirstService<PCService>();
 			pc.Shutdown();
 
 			return 0;

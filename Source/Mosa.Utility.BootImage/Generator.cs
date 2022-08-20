@@ -49,7 +49,8 @@ namespace Mosa.Utility.BootImage
 			diskDeviceDriver.Initialize();
 			diskDeviceDriver.Start();
 
-			if (options.ImageFormat == ImageFormat.VDI)
+			var isVdi = options.ImageFormat == ImageFormat.VDI;
+			if (isVdi)
 			{
 				// Create header
 				var header = VDI.CreateHeader(
@@ -202,6 +203,9 @@ namespace Mosa.Utility.BootImage
 			}
 
 			diskDeviceDriver.Dispose();
+
+			if (options.BootLoader == BootLoader.Limine)
+				Limine.Deploy(options.DiskImageFileName, isVdi);
 		}
 	}
 }

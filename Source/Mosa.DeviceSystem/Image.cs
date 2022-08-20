@@ -4,49 +4,45 @@ using Mosa.Runtime;
 
 namespace Mosa.DeviceSystem
 {
+	// TODO: Add support for other color depths (8-bit, 16-bit and 24-bit)
 	public class Image
 	{
-		public Pointer RawData;
+		public ConstrainedPointer Pixels { get; }
 
-		public int Bpp;
-		public int Width;
-		public int Height;
+		public uint Width { get; }
 
-		public Image(int width, int height)
+		public uint Height { get; }
+
+		public uint BytesPerPixel { get; }
+
+		public Image(uint width, uint height, uint bytesPerPixel)
 		{
 			Width = width;
 			Height = height;
-			Bpp = 4;
+			BytesPerPixel = bytesPerPixel;
 
-			RawData = GC.AllocateObject((uint)(width * height * Bpp));  // HACK - FIX ME! This is not an object. Use new byte[] instead
+			// Allocates virtual memory
+			Pixels = HAL.AllocateMemory(Width * Height * BytesPerPixel, 0);
 		}
 
-		public Image() { }
-
-		// TODO: Fix
-		public Image ScaleImage(int NewWidth, int NewHeight)
+		private uint GetOffset(uint x, uint y)
 		{
-			Pointer temp = GC.AllocateObject((uint)(NewWidth * NewHeight * Bpp));   // HACK - FIX ME! This is not an object. Use new byte[] instead
+			return (y * Width + x) * BytesPerPixel;
+		}
 
-			int w1 = Width, h1 = Height;
-			int x_ratio = ((w1 << 16) / NewWidth) + 1, y_ratio = ((h1 << 16) / NewHeight) + 1;
-			int x2, y2;
+		public uint GetColor(uint x, uint y)
+		{
+			return Pixels.Read32(GetOffset(x, y));
+		}
 
-			for (int i = 0; i < NewHeight; i++)
-				for (int j = 0; j < NewWidth; j++)
-				{
-					x2 = ((j * x_ratio) >> 16);
-					y2 = ((i * y_ratio) >> 16);
-					temp.Store32(((uint)((i * NewWidth) + j)) * (uint)Bpp, RawData.Load32(((uint)((y2 * w1) + x2)) * (uint)Bpp));
-				}
+		public void SetColor(uint x, uint y, uint color)
+		{
+			Pixels.Write32(GetOffset(x, y), color);
+		}
 
-			return new Image()
-			{
-				Width = NewWidth,
-				Height = NewHeight,
-				Bpp = Bpp,
-				RawData = temp
-			};
+		public void Clear(uint color = 0)
+		{
+			Internal.MemorySet(Pixels.Address, color, Pixels.Size);
 		}
 	}
 }

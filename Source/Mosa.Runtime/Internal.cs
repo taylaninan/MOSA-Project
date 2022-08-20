@@ -14,6 +14,18 @@ namespace Mosa.Runtime
 
 		internal static int objectSequence = 0;
 
+		/// <summary>
+		/// An object header the following memory layout:
+		///   - Hash Value (32-bit)
+		///   - Lock & Status (32-bit)
+		///   - MethodTable (native int)
+		/// </summary>
+		internal static int ObjectHeaderSize
+		{
+			[MethodImpl(MethodImplOptions.AggressiveInlining)]
+			get => 4 + 4 + Pointer.Size;
+		}
+
 		#endregion Data Members
 
 		#region Allocation
@@ -25,12 +37,12 @@ namespace Mosa.Runtime
 
 			// An object has the following memory layout:
 			//   - Object Header
-			//		- Hash Value (32-bit)
-			//		- Lock & Status (32-bit)
-			//		- MethodTable (Object references point here, so this is relative 0)
 			//   - 0 .. n object data fields
+			//
+			// Object references point to the end of the header
+			// so accessing the header requires negative offsets from the object reference
 
-			var allocationSize = 4 + 4 + Pointer.Size + classSize;
+			var allocationSize = ObjectHeaderSize + classSize;
 
 			var memory = GC.AllocateObject((uint)allocationSize);
 
@@ -43,7 +55,7 @@ namespace Mosa.Runtime
 			// Set MethodTable
 			memory.StorePointer(8, methodTable);
 
-			return memory + 8 + Pointer.Size;
+			return memory + ObjectHeaderSize;
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -57,11 +69,11 @@ namespace Mosa.Runtime
 		{
 			// An array has the following memory layout:
 			//   - Object Header
-			//		- Hash Value (32-bit)
-			//		- Lock & Status (32-bit)
-			//		- MethodTable (Object references point here, so this is relative 0)
 			//   - Length (native int)
 			//   - ElementType[length] elements
+			//
+			// Object references point to the end of the header
+			// so accessing the header requires negative offsets from the object reference
 
 			var memory = AllocateObject(methodTable, (uint)(Pointer.Size + (elements * elementSize)));
 
@@ -90,7 +102,7 @@ namespace Mosa.Runtime
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static Pointer Box8(Pointer methodTable, byte value)
 		{
-			var memory = AllocateObject(methodTable, Pointer.Size);
+			var memory = AllocateObject(methodTable, 8);
 
 			memory.Store8(value);
 
@@ -100,7 +112,7 @@ namespace Mosa.Runtime
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static Pointer Box16(Pointer methodTable, ushort value)
 		{
-			var memory = AllocateObject(methodTable, Pointer.Size);
+			var memory = AllocateObject(methodTable, 4);
 
 			memory.Store16(value);
 
@@ -110,7 +122,7 @@ namespace Mosa.Runtime
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static Pointer Box32(Pointer methodTable, uint value)
 		{
-			var memory = AllocateObject(methodTable, Pointer.Size);
+			var memory = AllocateObject(methodTable, 4);
 
 			memory.Store32(value);
 
@@ -120,7 +132,7 @@ namespace Mosa.Runtime
 		[MethodImpl(MethodImplOptions.NoInlining)]
 		public static Pointer Box64(Pointer methodTable, ulong value)
 		{
-			var memory = AllocateObject(methodTable, Pointer.Size == 4 ? (Pointer.Size * 2) : Pointer.Size);
+			var memory = AllocateObject(methodTable, 8);
 
 			memory.Store64(0, value);
 
@@ -130,7 +142,7 @@ namespace Mosa.Runtime
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static Pointer BoxR4(Pointer methodTable, float value)
 		{
-			var memory = AllocateObject(methodTable, Pointer.Size);
+			var memory = AllocateObject(methodTable, 4);
 
 			memory.StoreR4(value);
 
@@ -140,7 +152,7 @@ namespace Mosa.Runtime
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static Pointer BoxR8(Pointer methodTable, double value)
 		{
-			var memory = AllocateObject(methodTable, Pointer.Size == 4 ? (Pointer.Size * 2) : Pointer.Size);
+			var memory = AllocateObject(methodTable, 8);
 
 			memory.StoreR8(value);
 
@@ -177,17 +189,17 @@ namespace Mosa.Runtime
 		[MethodImpl(MethodImplOptions.NoInlining)]
 		public static void MemoryCopy(Pointer dest, Pointer src, uint count)
 		{
-			uint count32 = count >> 2;
-			for (uint i = 0; i < count32; i++)
+			var count32 = count >> 2;
+			for (var i = 0; i < count32; i++)
 			{
-				uint value = src.Load32(i << 2);
+				var value = src.Load32(i << 2);
 				dest.Store32(i << 2, value);
 			}
 
-			uint count8 = count & 0x03;
+			var count8 = count & 0x03;
 			for (uint i = 0; i < count8; i++)
 			{
-				byte value = src.Load8(count32 + i);
+				var value = src.Load8(count32 + i);
 				dest.Store8(count32 + i, value);
 			}
 		}
@@ -195,15 +207,15 @@ namespace Mosa.Runtime
 		[MethodImpl(MethodImplOptions.NoInlining)]
 		public static void MemorySet(Pointer dest, byte value, uint count)
 		{
-			uint value32 = (uint)(value << 24 | value << 16 | value << 8 | value << 0);
+			var value32 = (uint)(value << 24 | value << 16 | value << 8 | value << 0);
 
-			uint count32 = count >> 2;
-			for (uint i = 0; i < count32; i++)
+			var count32 = count >> 2;
+			for (var i = 0; i < count32; i++)
 			{
 				dest.Store32(i << 2, value32);
 			}
 
-			uint count8 = count & 0x03;
+			var count8 = count & 0x03;
 			for (uint i = 0; i < count8; i++)
 			{
 				dest.Store8(count32 + i, value);
@@ -213,15 +225,15 @@ namespace Mosa.Runtime
 		[MethodImpl(MethodImplOptions.NoInlining)]
 		public static void MemorySet(Pointer dest, ushort value, uint count)
 		{
-			uint value32 = (uint)(value << 16 | value << 0);
+			var value32 = (uint)(value << 16 | value << 0);
 
-			uint count32 = count >> 1;
-			for (uint i = 0; i < count32; i++)
+			var count32 = count >> 1;
+			for (var i = 0; i < count32; i++)
 			{
 				dest.Store32(i << 1, value32);
 			}
 
-			uint count16 = count & 0x01;
+			var count16 = count & 0x01;
 			for (uint i = 0; i < count16; i++)
 			{
 				dest.Store16(count32 + i, value);
@@ -231,7 +243,7 @@ namespace Mosa.Runtime
 		[MethodImpl(MethodImplOptions.NoInlining)]
 		public static void MemorySet(Pointer dest, uint value, uint count)
 		{
-			for (uint i = 0; i < count; i += 4)
+			for (var i = 0; i < count; i += 4)
 			{
 				dest.Store32(i, value);
 			}
@@ -240,8 +252,10 @@ namespace Mosa.Runtime
 		[MethodImpl(MethodImplOptions.NoInlining)]
 		public static void MemoryClear(Pointer dest, uint count, uint value = 0)
 		{
-			for (uint i = 0; i < count; i++)
+			for (var i = 0; i < count; i++)
+			{
 				dest.Store8(i, (byte)value);
+			}
 		}
 
 		#endregion Memory Manipulation
@@ -567,6 +581,11 @@ namespace Mosa.Runtime
 		public static void ThrowIndexOutOfRangeException()
 		{
 			throw new IndexOutOfRangeException();
+		}
+
+		public static void ThrowOverflowException()
+		{
+			throw new OverflowException();
 		}
 	}
 }
